@@ -9,6 +9,18 @@ namespace Cloris.Aion2Flow.Tests.App;
 public sealed class SettingsFlyoutViewModelTests
 {
     [Fact]
+    public void DamagePauseDefaultsAndOverridesPersist()
+    {
+        using var fixture = new SettingsViewModelFixture();
+        Assert.True(fixture.ViewModel.PauseDamageTime);
+        Assert.Equal(3, fixture.ViewModel.DamagePauseSeconds);
+        fixture.ViewModel.PauseDamageTime = false;
+        fixture.ViewModel.DamagePauseSeconds = 6;
+        var settings = new SettingsService(fixture.SettingsPath).Current;
+        Assert.False(settings.PauseDamageTime);
+        Assert.Equal(6, settings.DamagePauseSeconds);
+    }
+    [Fact]
     public void CombinedMetricsPersistAndDefaultToDpsOnFreshSettings()
     {
         using var fixture = new SettingsViewModelFixture();

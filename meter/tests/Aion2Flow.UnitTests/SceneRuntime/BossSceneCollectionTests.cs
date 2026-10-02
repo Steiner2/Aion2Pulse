@@ -13,6 +13,29 @@ public sealed class BossSceneCollectionTests
     private static readonly DateTimeOffset Started = new(2026, 6, 13, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public void BossOnlyModeUsesActiveDamageTimeAcrossIntermission()
+    {
+        var scene = CreateBossScene();
+        scene.ConfigureDamagePause(true);
+        var sink = SceneSinkFactory.CreateForLive(scene)();
+        AppendPlayer(sink, 100, "SyntheticPlayer", 10, isLocalPlayer: true);
+        AppendNpc(sink, 300, 2_100_002, NpcKind.Boss, 20);
+        AppendDamage(sink, 100, 300, 500, 1_000, 1);
+        AppendDamage(sink, 100, 300, 500, 3_000, 2);
+        sink.CompleteFlush(2);
+        var id = scene.SessionId;
+        Assert.Equal(2_000, scene.CreateFrame().Snapshot.EncounterTime);
+        AppendDamage(sink, 100, 300, 500, 60_000, 3);
+        AppendDamage(sink, 100, 300, 500, 62_000, 4);
+        sink.CompleteFlush(4);
+        var snapshot = scene.CreateFrame().Snapshot;
+        Assert.Equal(id, snapshot.EncounterId);
+        Assert.Equal(BossSceneState.Recording, scene.BossState);
+        Assert.Equal(4_000, snapshot.EncounterTime);
+        Assert.Equal(500d, snapshot.Combatants[100].DamagePerSecond);
+    }
+
+    [Fact]
     public void WaitingBossSceneCollectsMetadataAndDropsCombat()
     {
         var scene = CreateBossScene();

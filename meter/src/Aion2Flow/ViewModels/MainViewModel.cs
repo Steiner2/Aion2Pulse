@@ -23,6 +23,7 @@ public sealed partial class MainViewModel : FrameBatchedObservableObject, IAsync
 {
     internal static readonly TimeSpan LiveProjectionInterval = TimeSpan.FromMilliseconds(40);
     internal static readonly TimeSpan CaptureIndicatorRefreshInterval = TimeSpan.FromSeconds(1);
+    private readonly LatencyRefreshGate _latencyRefreshGate = new(TimeProvider.System);
     private static readonly BossDamageContribution[] EmptyBossDamageContributions = [];
     private static readonly IBrush BossRemainingHpBrush = new ImmutableSolidColorBrush(Color.FromArgb(0xF0, 0xDF, 0x21, 0x4A));
 
@@ -213,6 +214,7 @@ public sealed partial class MainViewModel : FrameBatchedObservableObject, IAsync
             _captureService.Scene.ChangeKind(SettingsFlyout.SceneKind, _captureService.Scene.SessionStarted, archiveCurrent: false);
         _captureService.Scene.SetCombatantStatisticsScope(SettingsFlyout.CombatantStatisticsScope);
         _captureService.Scene.ConfigureAutoSegmentation(SettingsFlyout.AutoSegmentCombats, SettingsFlyout.CombatIdleSeconds);
+        _captureService.Scene.ConfigureDamagePause(SettingsFlyout.PauseDamageTime, SettingsFlyout.DamagePauseSeconds);
         CombatantColumns = new CombatantColumnLayoutViewModel(frameBatchService);
         ApplyCombatantMetricDisplaySettings();
         CombatantColumns.SetBossShareColumnVisibility(false);
@@ -300,6 +302,13 @@ public sealed partial class MainViewModel : FrameBatchedObservableObject, IAsync
                 _captureService.Scene.ConfigureAutoSegmentation(SettingsFlyout.AutoSegmentCombats, SettingsFlyout.CombatIdleSeconds);
                 if (e.PropertyName == nameof(SettingsFlyoutViewModel.AutoSegmentCombats))
                     ResetLivePresentation();
+            });
+        else if (e.PropertyName is nameof(SettingsFlyoutViewModel.PauseDamageTime) or nameof(SettingsFlyoutViewModel.DamagePauseSeconds))
+            Dispatcher.UIThread.Post(() =>
+            {
+                CloseCurrentArchiveScope("combat-time-settings", isAutomatic: false);
+                _captureService.Scene.ConfigureDamagePause(SettingsFlyout.PauseDamageTime, SettingsFlyout.DamagePauseSeconds);
+                RefreshCombatStats();
             });
         else if (e.PropertyName == nameof(SettingsFlyoutViewModel.UseCompactMainMetrics) ||
                  e.PropertyName == nameof(SettingsFlyoutViewModel.ShowDamagePerSecondColumn) ||
@@ -478,7 +487,7 @@ public sealed partial class MainViewModel : FrameBatchedObservableObject, IAsync
         }
 
         _lastLiveProjectionPollTimestampTicks = timestampTicks;
-        _captureService.Scene.AdvanceCombatSegments(CaptureConnectionGate.IsLocked);
+        _captureService.Scene.AdvanceCombatSegments(CaptureConnectionGate.IsLocked && _captureService.IsDriverActive && !_captureService.HasDriverError);
         ProcessPendingProjectionChanges();
 
         if (_lastCaptureIndicatorRefreshTimestampTicks == long.MinValue ||
@@ -516,6 +525,7 @@ public sealed partial class MainViewModel : FrameBatchedObservableObject, IAsync
     private void ApplySnapshot(SceneCombatSnapshot snapshot, bool forceDetailRefresh = false)
     {
         SegmentStatus = IsViewingOverall ? "OVERALL · COMBAT TIME" : IsViewingArchivedEncounter ? "HISTORY" :
+            snapshot.Encounter.IsActive && _captureService.Scene.IsDamageTimePaused ? "PAUSED · NO GROUP DAMAGE" :
             !SettingsFlyout.AutoSegmentCombats || snapshot.Kind == SceneKind.Boss ? "CONTINUOUS" :
             snapshot.Encounter.Reason switch
             {
@@ -1311,11 +1321,13 @@ public sealed partial class MainViewModel : FrameBatchedObservableObject, IAsync
             CaptureLockIndicatorToolTip = Localization["Status_Locked"];
         }
 
-        var currentRttMilliseconds = _captureService.CurrentRoundTripTimeMilliseconds;
+        if (!isCaptureLocked) _latencyRefreshGate.Reset();
+        else if (!_latencyRefreshGate.TryRefresh()) return;
+        var currentRttMilliseconds = isCaptureLocked ? _captureService.CurrentRoundTripTimeMilliseconds : null;
         if (!currentRttMilliseconds.HasValue || currentRttMilliseconds.Value <= 0)
         {
             RoundTripTimeMilliseconds = 0;
-        OnPropertyChanged(nameof(RoundTripTimeDisplay));
+            OnPropertyChanged(nameof(RoundTripTimeDisplay));
             LatencyIndicatorColor = IndicatorIdleColor;
             LatencyToolTip = Localization["Status_LatencyUnavailable"];
             return;

@@ -11,5 +11,7 @@
   "ShowDamageColumn": true,
   "ShowTotalDamagePerSecond": true,
   "ShowBothMetrics": false,
-  "CombatantSortMetric": "DamagePerSecond"
+  "CombatantSortMetric": "DamagePerSecond",
+  "PauseDamageTime": true,
+  "DamagePauseSeconds": 3
 }

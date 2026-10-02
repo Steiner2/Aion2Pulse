@@ -61,7 +61,7 @@ public sealed partial class SceneLiveReadModel
                             (enemyEntity.IsPlayer || enemyEntity.OwnerEntityId.HasValue);
         var resolution = CombatOccurrenceResolution.Primary;
         var isDamage = CombatContributionResolver.TryResolve(sourceId, targetId, in observation, in resolution, out var contribution) &&
-                       contribution.Metric == CombatMetricKind.Damage;
+                       contribution.Metric == CombatMetricKind.Damage && contribution.Amount > 0;
         if (!isDamage || enemyIsPlayer || enemyId <= 0)
             return _pull.State == PullSegmentState.Recording && (!isDamage || !enemyIsPlayer);
 

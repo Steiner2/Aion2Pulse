@@ -216,15 +216,83 @@ public sealed class PullSegmentationTests
     }
 
     [Fact]
-    public void StaleExplicitActiveFlagEventuallyUsesLongerTrashTimeout()
+    public void StaleExplicitActiveFlagDoesNotDelayTrashFreeze()
     {
         var f = new Fixture();
         f.Sink.SetNpcBattle(f.Source(100), 200, true);
         f.Damage(100, 200, 100, 1_000);
-        f.At(10_000);
-        Assert.True(f.Scene.CreateFrame().Snapshot.Encounter.IsActive);
-        f.At(46_100);
+        f.At(6_100);
         Assert.Equal("idle-heuristic", f.Scene.CreateFrame().Snapshot.Encounter.Reason);
+    }
+
+    [Fact]
+    public void RepeatedInactivePacketsDoNotRestartSettlement()
+    {
+        var f = new Fixture();
+        f.Damage(100, 200, 500, 1_000);
+        f.Damage(100, 200, 500, 2_000);
+        f.Sink.SetNpcBattle(f.Source(2_100), 200, false);
+        f.Sink.SetNpcBattle(f.Source(2_600), 200, false);
+        f.Sink.SetNpcBattle(f.Source(3_000), 200, false);
+        f.At(3_150);
+        var snapshot = f.Scene.CreateFrame().Snapshot;
+        Assert.Equal(PullSegmentState.Frozen, f.Scene.PullState);
+        Assert.Equal(1_100, snapshot.EncounterTime);
+        Assert.Equal("enemies-inactive", snapshot.Encounter.Reason);
+    }
+
+    [Fact]
+    public void BossDamageClockExcludesPauseButKeepsOneEncounterAndRawTimeline()
+    {
+        var f = new Fixture();
+        f.Scene.ConfigureDamagePause(true);
+        f.Sink.AppendNpcKind(f.Source(100), 200, NpcKind.Boss);
+        f.Damage(100, 200, 500, 1_000);
+        f.Damage(100, 200, 500, 3_000);
+        var id = f.Scene.SessionId;
+        var before = f.Scene.CreateFrame().Snapshot;
+        f.At(50_000);
+        var paused = f.Scene.CreateFrame().Snapshot;
+        Assert.True(paused.Encounter.IsActive);
+        Assert.True(f.Scene.IsDamageTimePaused);
+        Assert.Equal(2_000, paused.EncounterTime);
+        Assert.Equal(before.Combatants[100].DamagePerSecond, paused.Combatants[100].DamagePerSecond);
+        f.Damage(200, 100, 900, 51_000); // Pattern damage received is not DPS activity.
+        f.Recovery(100, 100, 100, 52_000);
+        f.Damage(100, 200, 0, 53_000); // Zero-damage / immune attempts do not restart the clock.
+        Assert.Equal(2_000, f.Scene.CreateFrame().Snapshot.EncounterTime);
+        f.Damage(100, 200, 500, 60_000);
+        f.Damage(100, 200, 500, 62_000);
+        var resumed = f.Scene.CreateFrame().Snapshot;
+        Assert.Equal(id, resumed.EncounterId);
+        Assert.Equal(4_000, resumed.EncounterTime);
+        Assert.Equal(2_000, resumed.Combatants[100].DamageAmount);
+        Assert.Equal(500d, resumed.Combatants[100].DamagePerSecond);
+        Assert.True(resumed.EncounterEndTime - resumed.EncounterStartTime >= 61_000);
+        Assert.False(f.Scene.IsDamageTimePaused);
+        f.Sink.AppendNpcHp(f.Source(63_000), 200, 0);
+        f.At(64_100);
+        Assert.False(f.Scene.CreateFrame().Snapshot.Encounter.IsActive);
+        Assert.True(f.Scene.TryDequeuePendingArchive(out var archive));
+        Assert.Equal(4_000, archive.Snapshot.EncounterTime);
+        f.At(90_000);
+        Assert.Equal(4_000, f.Scene.CreateFrame().Snapshot.EncounterTime);
+    }
+
+    [Fact]
+    public void ActiveDamageClockFreezesWhileTrashEndSettlesAndResetsOnNextPack()
+    {
+        var f = new Fixture();
+        f.Scene.ConfigureDamagePause(true);
+        f.Damage(100, 200, 500, 1_000);
+        f.Damage(100, 200, 500, 3_000);
+        f.At(5_000);
+        Assert.Equal(2_000, f.Scene.CreateFrame().Snapshot.EncounterTime);
+        f.At(8_100);
+        Assert.Equal(PullSegmentState.Frozen, f.Scene.CreateFrame().Snapshot.Encounter.IsActive ? PullSegmentState.Recording : f.Scene.PullState);
+        f.Damage(100, 201, 250, 10_000);
+        Assert.Equal(1_000, f.Scene.CreateFrame().Snapshot.EncounterTime);
+        Assert.Equal(250, f.Scene.CreateFrame().Snapshot.Combatants[100].DamageAmount);
     }
 
     private sealed class Fixture

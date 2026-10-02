@@ -9,6 +9,7 @@ network packet analysis using WinDivert.
 - Damage, DPS, healing and HPS, including a combined four-column view.
 - Automatic encounters for mob packs and bosses. Finished results stay frozen
   between fights; the next pull starts a new encounter.
+- Paused combat-rate time during long gaps without group damage.
 - Three overlay designs: Raid Classic, Focus Glass and Combat Studio.
 - Compact title bar, class colors, transparent backgrounds and interface scaling.
 - A separate settings window and configurable hotkeys.
@@ -26,7 +27,8 @@ The selected view persists between starts.
 - Windows x64.
 - Administrator privileges for the WinDivert capture driver.
 
-Extract the complete Windows package and launch **Aion2Pulse.exe** as
+Download the Windows ZIP from [Releases](https://github.com/Steiner2/Aion2Pulse/releases/latest).
+Extract the complete package and launch **Aion2Pulse.exe** as
 administrator. The package includes the .NET runtime; Npcap is not required.
 Start the meter before entering the game. If the character is not recognized,
 return to character selection and enter again.
@@ -42,6 +44,20 @@ Both DPS and HPS use shared encounter duration. Healing is the amount reported
 by captured packets; it does not represent verified effective healing or overheal.
 Unknown or expired latency measurements show **— ms**. A TCP-derived latency
 value is identified in the tooltip.
+
+By default, rate time follows positive group damage events. Short intervals
+between hits count toward that time; gaps longer than three seconds do not.
+The display stays stable while no further damage arrives, and boss intermissions
+remain part of the same encounter. Actual event timestamps remain intact for
+history and skill details. This is an activity heuristic, not verified detection
+of cutscenes or invulnerability; voluntary inactivity or unusually slow attacks
+can also be excluded. Adjust the threshold or disable **Exclude long damage
+pauses from DPS / HPS time** under **Settings → Combat** to use elapsed combat time.
+Changing this option starts a fresh encounter so the two timing methods are not
+mixed within one result.
+
+Latency display refreshes every five seconds. Capture connection indicators
+continue updating independently, and disconnects immediately clear the latency.
 
 ## Build from source
 

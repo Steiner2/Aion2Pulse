@@ -2,7 +2,7 @@ param(
     [switch]$Test,
     [switch]$Publish,
     [switch]$Offline,
-    [string]$PublishFolder = 'artifacts\Aion2Pulse-0.3.1'
+    [string]$PublishFolder = 'artifacts\Aion2Pulse-0.3.2'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
@@ -24,7 +24,7 @@ try {
     }
     if ($Publish) {
         $publishDirectory = Join-Path $projectRoot $PublishFolder
-        & $dotnetCommand publish src\Aion2Flow\Aion2Flow.csproj -c Release -r win-x64 --self-contained true -p:PublishAot=false -o $publishDirectory @offlineArguments
+        & $dotnetCommand publish src\Aion2Flow\Aion2Flow.csproj -c Release -r win-x64 --self-contained true -p:PublishAot=false -p:DebugSymbols=false -p:DebugType=None "-p:PathMap=$projectRoot=/_/" -o $publishDirectory @offlineArguments
         if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
         Copy-Item -LiteralPath 'LICENSE.txt' -Destination $publishDirectory
         Copy-Item -LiteralPath 'UPSTREAM.md' -Destination $publishDirectory
@@ -37,7 +37,7 @@ try {
             [pscustomobject]@{ Name = $_.Name; Length = $_.Length; SHA256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
         }
         $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $projectRoot 'artifacts\pulse-publish-manifest.json')
-        $packageItems = Get-ChildItem -LiteralPath $publishDirectory | Where-Object { $_.Name -notin 'history', 'logs' }
+        $packageItems = Get-ChildItem -LiteralPath $publishDirectory | Where-Object { $_.Name -notin 'history', 'logs' -and $_.Extension -ne '.pdb' }
         Compress-Archive -Path $packageItems.FullName -DestinationPath (Join-Path $projectRoot 'artifacts\Aion2Pulse-win-x64.zip') -Force
     }
 } finally {

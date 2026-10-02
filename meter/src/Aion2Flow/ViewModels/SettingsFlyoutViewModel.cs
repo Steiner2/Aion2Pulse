@@ -57,6 +57,8 @@ public sealed partial class SettingsFlyoutViewModel : ObservableObject
             SceneKind = persisted.SceneKind;
             AutoSegmentCombats = persisted.AutoSegmentCombats;
             CombatIdleSeconds = persisted.CombatIdleSeconds;
+            PauseDamageTime = persisted.PauseDamageTime;
+            DamagePauseSeconds = persisted.DamagePauseSeconds;
             UseCompactMainMetrics = persisted.UseCompactMainMetrics;
             ShowDamagePerSecondColumn = persisted.ShowDamagePerSecondColumn;
             ShowDamageColumn = persisted.ShowDamageColumn;
@@ -150,6 +152,8 @@ public sealed partial class SettingsFlyoutViewModel : ObservableObject
 
     [ObservableProperty]
     public partial int CombatIdleSeconds { get; set; } = 5;
+    [ObservableProperty] public partial bool PauseDamageTime { get; set; } = true;
+    [ObservableProperty] public partial int DamagePauseSeconds { get; set; } = 3;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(UseCompactMainMetricsDisplay))]
@@ -387,6 +391,8 @@ public sealed partial class SettingsFlyoutViewModel : ObservableObject
     partial void OnAutoSegmentCombatsChanged(bool value) => PersistSettings();
 
     partial void OnCombatIdleSecondsChanged(int value) => PersistSettings();
+    partial void OnPauseDamageTimeChanged(bool value) => PersistSettings();
+    partial void OnDamagePauseSecondsChanged(int value) => PersistSettings();
 
     partial void OnUseCompactMainMetricsChanged(bool value) => PersistSettings();
 
@@ -610,6 +616,8 @@ public sealed partial class SettingsFlyoutViewModel : ObservableObject
             s.SceneKind = SceneKind;
             s.AutoSegmentCombats = AutoSegmentCombats;
             s.CombatIdleSeconds = CombatIdleSeconds;
+            s.PauseDamageTime = PauseDamageTime;
+            s.DamagePauseSeconds = DamagePauseSeconds;
             s.UseCompactMainMetrics = UseCompactMainMetrics;
             s.ShowDamagePerSecondColumn = ShowDamagePerSecondColumn;
             s.ShowDamageColumn = ShowDamageColumn;

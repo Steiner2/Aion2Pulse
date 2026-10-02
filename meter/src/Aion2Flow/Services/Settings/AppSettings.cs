@@ -26,6 +26,8 @@ public sealed class AppSettings
     public bool AutoSegmentCombats { get; set; } = true;
 
     public int CombatIdleSeconds { get; set => field = Math.Clamp(value, 2, 30); } = 5;
+    public bool PauseDamageTime { get; set; } = true;
+    public int DamagePauseSeconds { get; set => field = Math.Clamp(value, 1, 10); } = 3;
 
     public bool UseCompactMainMetrics { get; set; } = true;
 

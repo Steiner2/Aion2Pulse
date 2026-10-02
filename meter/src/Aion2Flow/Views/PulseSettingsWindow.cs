@@ -50,6 +50,9 @@ public sealed class PulseSettingsWindow : Window
         tabs.Items.Add(Page("Combat", "Damage and healing share the same combat duration. Results freeze between pulls.",
             Check("Automatically start a new fight per pull", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.AutoSegmentCombats, mode: BindingMode.TwoWay)),
             Range("Inactivity timeout (seconds)", CompiledBinding.Create<SettingsFlyoutViewModel, int>(x => x.CombatIdleSeconds, mode: BindingMode.TwoWay), 2, 30),
+            Check("Exclude long damage pauses from DPS / HPS time", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.PauseDamageTime, mode: BindingMode.TwoWay)),
+            Range("Damage pause threshold (seconds)", CompiledBinding.Create<SettingsFlyoutViewModel, int>(x => x.DamagePauseSeconds, mode: BindingMode.TwoWay), 1, 10),
+            Text("Uses group damage activity, not a verified cutscene or invulnerability signal. Disable to include all combat time."),
             EnumChoice<Cloris.Aion2Flow.SceneRuntime.Model.SceneKind>("Combat tracking", CompiledBinding.Create<SettingsFlyoutViewModel, Cloris.Aion2Flow.SceneRuntime.Model.SceneKind>(x => x.SceneKind, mode: BindingMode.TwoWay)),
             EnumChoice<EncounterTimeDisplayFormat>("Time format", CompiledBinding.Create<SettingsFlyoutViewModel, EncounterTimeDisplayFormat>(x => x.EncounterTimeDisplayFormat, mode: BindingMode.TwoWay)),
             Check("Show boss health", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowFocusStatusBar, mode: BindingMode.TwoWay)),
@@ -61,7 +64,7 @@ public sealed class PulseSettingsWindow : Window
         tabs.Items.Add(Page("Capture", "Passive network packet recording.", Text("Global Early Access · network only"),
             Text("Capture starts with the meter. Driver, game port and connection status remain visible in the footer."),
             Text("Healing shows amounts reported by the packets. Shield absorption is kept separate in player details.")));
-        tabs.Items.Add(Page("About", "Aion2Pulse", Text("Version 0.3.1"), Text("Based on the Aion2Flow packet engine. GPL-3.0 license and upstream credits are included in the package.")));
+        tabs.Items.Add(Page("About", "Aion2Pulse", Text("Version 0.3.2"), Text("Based on the Aion2Flow packet engine. GPL-3.0 license and upstream credits are included in the package.")));
         var done = new Button { Content = "Done", HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(22, 7) };
         done.Click += (_, _) => Close();
         var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(20, 10) };

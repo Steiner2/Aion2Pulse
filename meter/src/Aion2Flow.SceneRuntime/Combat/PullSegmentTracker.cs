@@ -52,7 +52,10 @@ public sealed class PullSegmentTracker
         // Only explicit state received after the last hit may close an enemy.
         if (at < state.LastDamageAt)
             return;
-        _enemies[enemyId] = state with { Active = dead ? false : active, ObservedAt = at };
+        var nextActive = dead ? false : active;
+        if (!nextActive.HasValue || (state.Active == false && nextActive == false))
+            return;
+        _enemies[enemyId] = state with { Active = nextActive, ObservedAt = at };
     }
 
     public bool Advance(long now, bool captureHealthy = true)
@@ -63,12 +66,10 @@ public sealed class PullSegmentTracker
             return Freeze(LastActivityAt, "capture-interrupted");
 
         var allInactive = _enemies.Count > 0;
-        var anyActive = false;
         var latestStateAt = LastActivityAt;
         foreach (var enemy in _enemies.Values)
         {
             allInactive &= enemy.Active == false;
-            anyActive |= enemy.Active == true;
             latestStateAt = Math.Max(latestStateAt, enemy.ObservedAt);
         }
         // Allow late packets and staggered death/state messages to settle first.
@@ -78,9 +79,8 @@ public sealed class PullSegmentTracker
         if (HasBoss)
             return false;
         var timeout = HasTrainingDummy ? 10_000 : Math.Clamp(IdleTimeoutMilliseconds, 2_000, 30_000);
-        // Stale active flags are not allowed to hold a trash segment indefinitely.
-        if (anyActive)
-            timeout = Math.Max(timeout, 45_000);
+        // Active flags can remain set after despawn. Actual damage controls trash
+        // inactivity; known bosses already have separate intermission protection.
         return now - LastActivityAt >= timeout && Freeze(LastActivityAt, "idle-heuristic");
     }
 

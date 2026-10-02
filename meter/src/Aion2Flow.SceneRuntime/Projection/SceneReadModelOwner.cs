@@ -39,6 +39,17 @@ public sealed class SceneReadModelOwner(
     private long _snapshotCacheValidUntilMilliseconds = -1;
     private ProjectionCacheStats _projectionCacheStats;
     private (long Start, long End, bool Active, string Reason)? _pullWindow;
+    private long? _rateDuration;
+
+    internal void SetRateDuration(long duration)
+    {
+        lock (_gate)
+        {
+            if (_rateDuration == duration) return;
+            _rateDuration = duration;
+            _snapshotCache = null;
+        }
+    }
 
     internal void SetPullWindow(long start, long end, bool active, string reason)
     {
@@ -457,7 +468,7 @@ public sealed class SceneReadModelOwner(
         adapter.BuildSnapshot(_snapshotBuilder);
         if (_pullWindow is { } pull)
         {
-            var duration = pull.End - pull.Start;
+            var duration = _rateDuration ?? (pull.End - pull.Start);
             _snapshotBuilder.SetEncounterWindow(pull.Start, pull.End, duration);
             foreach (var id in _snapshotBuilder.CombatantIds)
             {
@@ -468,6 +479,16 @@ public sealed class SceneReadModelOwner(
             _snapshotBuilder.SetEncounter(new EncounterSummarySnapshot(
                 _snapshotBuilder.TargetObservation?.InstanceId ?? 0,
                 NpcRuntimePhaseHint.Unknown, pull.Active, !pull.Active, pull.Reason));
+        }
+        else if (_rateDuration is long activeDuration)
+        {
+            _snapshotBuilder.SetEncounterWindow(_snapshotBuilder.EncounterStartTime, _snapshotBuilder.EncounterEndTime, activeDuration);
+            foreach (var id in _snapshotBuilder.CombatantIds)
+            {
+                ref var metrics = ref _snapshotBuilder.GetExistingCombatant(id);
+                metrics.DamagePerSecond = (double)metrics.DamageAmount / activeDuration * 1000;
+                metrics.HealingPerSecond = (double)metrics.HealingAmount / activeDuration * 1000;
+            }
         }
         ApplyBossFocusSnapshots(_snapshotBuilder, now);
         ApplyBossNpcCodes(_snapshotBuilder);
@@ -654,6 +675,7 @@ public sealed class SceneReadModelOwner(
             _snapshotCacheKey = default;
             _snapshotCacheValidUntilMilliseconds = -1;
             _pullWindow = null;
+            _rateDuration = null;
         }
     }
 

@@ -374,6 +374,7 @@ public sealed partial class SceneLiveReadModel : ILiveSceneCollectionPolicy
         _frozenBossIdentities = null;
         _seededBossSceneRuntimeStates.Clear();
         _pull.Reset();
+        _damageClock.Reset();
         _pullClockAnchorCapture = 0;
         Owner.ResetCombat(
             SessionId,
@@ -411,6 +412,7 @@ public sealed partial class SceneLiveReadModel : ILiveSceneCollectionPolicy
         _frozenBossIdentities = null;
         _seededBossSceneRuntimeStates.Clear();
         _pull.Reset();
+        _damageClock.Reset();
         _pullClockAnchorCapture = 0;
         Volatile.Write(ref _owner, CreateOwner(SessionId, SessionStarted, boundaryOrdinal, metadataContinuity));
         _explicitPullStates.Clear();
@@ -418,6 +420,13 @@ public sealed partial class SceneLiveReadModel : ILiveSceneCollectionPolicy
     }
 
     bool ILiveSceneCollectionPolicy.ShouldAppendCombat(in PacketObservationSource packet, int sourceId, int targetId, in CombatWireObservation observation, IRuntimeObservationSink sink)
+    {
+        var admitted = ShouldAppendCombatCore(in packet, sourceId, targetId, in observation, sink);
+        if (admitted) ObserveDamageTime(in packet, sourceId, targetId, in observation);
+        return admitted;
+    }
+
+    private bool ShouldAppendCombatCore(in PacketObservationSource packet, int sourceId, int targetId, in CombatWireObservation observation, IRuntimeObservationSink sink)
     {
         if (_kind == SceneKind.Standard)
         {
