@@ -11,6 +11,28 @@ namespace Cloris.Aion2Flow.Tests.App;
 public sealed class EncounterArchiveServiceTests
 {
     [Fact]
+    public async Task NormalPullsCannotEvictBossHistoryAcrossRestart()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"pulse-retention-{Guid.NewGuid():N}");
+        await using (var writer = new EncounterArchiveService(directory))
+        {
+            var started = DateTimeOffset.UtcNow;
+            for (var i = 0; i < 55; i++)
+                writer.Archive(CreateSceneOwner(100, 200 + i, started.AddSeconds(i), true).CreateArchivePayload(), "combat-ended", true);
+            for (var i = 0; i < 75; i++)
+                writer.Archive(CreateSceneOwner(100, 500 + i, started.AddSeconds(100 + i), false).CreateArchivePayload(), "idle-heuristic", true);
+            Assert.Equal(50, writer.History.Count(r => EncounterArchiveService.IsBossEncounter(r.ScenePayload.Snapshot)));
+            Assert.Equal(50, writer.History.Count(r => !EncounterArchiveService.IsBossEncounter(r.ScenePayload.Snapshot)));
+            await writer.FlushAsync();
+            Assert.Null(writer.StorageError);
+        }
+        await using var reader = new EncounterArchiveService(directory);
+        Assert.Equal(100, reader.History.Count);
+        Assert.Equal(50, reader.History.Count(r => EncounterArchiveService.IsBossEncounter(r.ScenePayload.Snapshot)));
+        Assert.Equal(100, Directory.GetFiles(directory, "*.json").Length);
+    }
+
+    [Fact]
     public async Task DiskHistory_RestoresMetricsNamesAndSkillEventsAfterRestart()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"pulse-history-{Guid.NewGuid():N}");
@@ -29,6 +51,11 @@ public sealed class EncounterArchiveServiceTests
         Assert.True(restored.ScenePayload.IdentityScope.TryGetPcMetadata(100, out var metadata));
         Assert.Equal("Tester", metadata.Nickname);
         Assert.Equal(payload.CreateDetailDelta(100).MetricEvents, restored.ScenePayload.CreateDetailDelta(100).MetricEvents);
+        var outgoingTimeline = Cloris.Aion2Flow.Views.SkillEventTimelineView.Events(restored.ScenePayload, 100, false);
+        Assert.Equal(2, outgoingTimeline.Length);
+        Assert.Equal(1, outgoingTimeline[1].ObservedAtMilliseconds - outgoingTimeline[0].ObservedAtMilliseconds);
+        Assert.Empty(Cloris.Aion2Flow.Views.SkillEventTimelineView.Events(restored.ScenePayload, 100, true));
+        Assert.Equal(outgoingTimeline, Cloris.Aion2Flow.Views.SkillEventTimelineView.Events(restored.ScenePayload, 200, true));
         Assert.Equal(payload.CreateDetailDelta(100).MechanicEvents, restored.ScenePayload.CreateDetailDelta(100).MechanicEvents);
         Assert.Equal(payload.CreateDetailDelta(100).OutgoingPairs, restored.ScenePayload.CreateDetailDelta(100).OutgoingPairs);
         Assert.True(restored.ScenePayload.TimelineSegment.IsEmpty);
@@ -427,12 +454,12 @@ public sealed class EncounterArchiveServiceTests
     private static SceneReadModelOwner CreateSceneOwner(int playerId, int bossId)
         => CreateSceneOwner(playerId, bossId, DateTimeOffset.Now);
 
-    private static SceneReadModelOwner CreateSceneOwner(int playerId, int bossId, DateTimeOffset sceneStarted)
+    private static SceneReadModelOwner CreateSceneOwner(int playerId, int bossId, DateTimeOffset sceneStarted, bool boss = true)
     {
         const int bossCode = 2_999_997;
         CombatResourceTestFixture.SetResources([], new Dictionary<int, NpcDisplayEntry>
         {
-            [bossCode] = new(bossCode, "Archive Boss", NpcCatalogKind.Boss, NpcHpDisplayScale.Normal)
+            [bossCode] = new(bossCode, "Archive Boss", boss ? NpcCatalogKind.Boss : NpcCatalogKind.Monster, NpcHpDisplayScale.Normal)
         });
 
         var journal = new ObservedEventJournal();
@@ -440,7 +467,7 @@ public sealed class EncounterArchiveServiceTests
         AppendState(journal, sceneId, playerId, 0, StateCodes.PlayerIdentity, 0, 0, "Tester", 1, 1_000);
         AppendState(journal, sceneId, bossId, 0, bossCode, 0, 0, null, 2, 1_001);
         AppendState(journal, sceneId, bossCode, 0, StateCodes.LocalizedNpcName, 0, 0, "Archive Boss", 3, 1_002);
-        AppendState(journal, sceneId, bossId, 0, StateCodes.NpcKind, (int)NpcKind.Boss, 0, null, 4, 1_003);
+        AppendState(journal, sceneId, bossId, 0, StateCodes.NpcKind, (int)(boss ? NpcKind.Boss : NpcKind.Monster), 0, null, 4, 1_003);
         AppendEntityVital(journal, sceneId, bossId, 50_000, 100_000, 5, 1_004);
         AppendState(journal, sceneId, bossId, 0, StateCodes.NpcBattle, 1, 0, null, 6, 1_005);
         AppendCombat(journal, sceneId, playerId, bossId, 750, 7, 1_500);

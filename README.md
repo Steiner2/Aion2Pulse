@@ -2,6 +2,12 @@
   <img src="docs/assets/banner.svg" alt="Aion2Pulse — Damage and healing. One clear view." width="100%">
 </p>
 
+> **0.4.0-preview.1 — experimental preview.** This branch adds tighter overlay
+> columns, independent boss/pull retention and a skill-effect timeline. These
+> changes are not included in the published 0.3.3 release. Further proposed
+> analyses and their evidence limits are documented in the
+> [packet analysis roadmap](docs/packet-analysis-roadmap.md).
+
 <p align="center">
   <strong>A DPS and healing meter for AION 2.</strong><br>
   Automatic encounters, compact overlays and the details behind every fight.
@@ -42,9 +48,24 @@ and the combined damage/DPS/healing/HPS view. **DPS remains the default.**
 
 ![Combat history populated with synthetic encounters](docs/assets/pulse-history-SplitView.png)
 
-Search the last 50 fights, filter bosses or incomplete encounters, and select a
-player for skill details. Choose a split view, compact list or card layout.
+Retain the last 50 boss fights and 50 normal pulls independently. New mob pulls
+cannot evict saved bosses. History opens on bosses; filters also show all fights,
+normal pulls or incomplete encounters. Select a player for skill details and a
+timeline of packet-observed hits, heals and shields, including original skill
+icons and timestamps. These effect timestamps are not guaranteed cast-start times.
+Choose a split view with an adjustable divider, compact list or card layout.
 Overall totals cover the current map visit and exclude travel and waiting time.
+
+<details>
+<summary><strong>See the skill event timeline</strong></summary>
+
+![Skill event timeline with synthetic encounters](docs/assets/pulse-history-Timeline.png)
+
+</details>
+
+The overlay uses a compact automatic width. Drag its bottom-right grip while
+interactive or choose a saved width under **Settings → Overlay**. Combined DPS/HPS
+keeps a wider minimum for four readable numerical columns.
 
 <details>
 <summary><strong>See the settings window</strong></summary>

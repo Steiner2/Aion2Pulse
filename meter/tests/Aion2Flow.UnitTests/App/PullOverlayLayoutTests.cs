@@ -59,9 +59,13 @@ public sealed class PullOverlayLayoutTests
             Assert.False(vm.IsCapturing);
             // Explicit test fixture only. No synthetic damage enters the shipping app.
             var scene = provider.GetRequiredService<WinDivertCaptureService>().Scene;
+            var resources = provider.GetRequiredService<GameResourceService>();
+            var previewSkills = resources.Skills.Where(skill => resources.IsPlayerProfessionSkill(skill.SkillId) && resources.ResolveSkillIconAssetName(skill.SkillId) is not null).Select(skill => skill.SkillId).Take(12).ToArray();
+            Assert.NotEmpty(previewSkills);
             var sink = SceneSinkFactory.CreateForLive(scene)();
             var started = DateTimeOffset.Now.ToUnixTimeMilliseconds();
             PacketObservationSource Source(int offset) => new(started + offset, offset + 1, 0x0438, 30, offset, default);
+            sink.SetCurrentMap(Source(0), 910035);
             var classes = new[] { CharacterClass.Gladiator, CharacterClass.Sorcerer, CharacterClass.Ranger, CharacterClass.Cleric };
             var names = new[] { "Preview · You", "Preview · Mage", "Preview · Ranger", "Preview · Healer" };
             for (var i = 0; i < classes.Length; i++)
@@ -69,12 +73,13 @@ public sealed class PullOverlayLayoutTests
                 sink.AppendNickname(Source(0), 100 + i, names[i], characterClass: classes[i], isLocalPlayer: i == 0);
                 sink.AppendPlayerGroupMember(Source(0), 100 + i, PlayerGroupMembership.Party((byte)i));
             }
-            sink.AppendNpcKind(Source(0), 200, NpcKind.Monster);
+            sink.AppendNpcCode(Source(0), 200, 2_100_002);
+            sink.AppendNpcKind(Source(0), 200, NpcKind.Boss);
             for (var offset = 0; offset <= 12_000; offset += 1_000)
             {
                 for (var i = 0; i < classes.Length; i++)
                 {
-                    var wire = new CombatWireObservation { SkillCode = 11_000_010, Damage = 10_000 - i * 1_800, HitCount = 1, AttemptCount = 1 };
+                    var wire = new CombatWireObservation { SkillCode = previewSkills[(offset / 1000 + i) % previewSkills.Length], Damage = 10_000 - i * 1_800, HitCount = 1, AttemptCount = 1 };
                     sink.AppendCombatWireObservation(Source(offset), 100 + i, 200, in wire);
                 }
                 sink.CompleteFlush(offset + 1);
@@ -97,9 +102,9 @@ public sealed class PullOverlayLayoutTests
             vm.ReturnToLiveCommand.Execute(null);
             frameBatch.FlushFrame();
             Assert.False(vm.IsViewingOverall);
-            Assert.Equal(440, content.Bounds.Width);
+            Assert.Equal(300, content.Bounds.Width);
             Assert.InRange(content.Bounds.Height, 160, 400);
-            using var bitmap = new RenderTargetBitmap(new PixelSize(880, (int)Math.Ceiling(content.Bounds.Height * 2)), new Vector(192, 192));
+            using var bitmap = new RenderTargetBitmap(new PixelSize((int)content.Bounds.Width * 2, (int)Math.Ceiling(content.Bounds.Height * 2)), new Vector(192, 192));
             bitmap.Render(content);
             var previewPath = Environment.GetEnvironmentVariable("AION2_PREVIEW_PATH");
             if (!string.IsNullOrWhiteSpace(previewPath))
@@ -186,6 +191,29 @@ public sealed class PullOverlayLayoutTests
                 historyContent.Measure(new Size(1050, 660)); historyContent.Arrange(new Rect(0, 0, 1050, 660)); Dispatcher.UIThread.RunJobs();
                 SavePreview(historyContent, $"pulse-history-{layout}.png");
             }
+            vm.SettingsFlyout.HistoryLayout = HistoryLayout.SplitView;
+            historyContent.Measure(new Size(1050, 660)); historyContent.Arrange(new Rect(0, 0, 1050, 660)); Dispatcher.UIThread.RunJobs();
+            var divider = Assert.Single(historyContent.GetVisualDescendants().OfType<GridSplitter>());
+            Assert.True(divider.IsVisible);
+            Assert.InRange(divider.TranslatePoint(default, historyContent)!.Value.X, 210, 320);
+            var playerButton = historyContent.GetVisualDescendants().OfType<Button>().First(button => button.Content is Grid grid && grid.Children.OfType<Cloris.Aion2Flow.Controls.PcDisplay>().Any());
+            playerButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Dispatcher.UIThread.RunJobs();
+            var detailTabs = historyContent.GetVisualDescendants().OfType<TabControl>().Single();
+            detailTabs.SelectedIndex = 1;
+            historyContent.Measure(new Size(1050, 660)); historyContent.Arrange(new Rect(0, 0, 1050, 660)); Dispatcher.UIThread.RunJobs();
+            Assert.Single(historyContent.GetVisualDescendants().OfType<SkillEventTimelineView>());
+            Assert.NotEmpty(historyContent.GetVisualDescendants().OfType<ListBox>().Single().Items);
+            SavePreview(historyContent, "pulse-history-Timeline.png");
+            historyWindow.Width = 800; Dispatcher.UIThread.RunJobs();
+            Assert.False(divider.IsVisible);
+            vm.SettingsFlyout.ShowBothMetrics = false;
+            vm.SettingsFlyout.OverlayWidth = 700;
+            Assert.Equal(700, window.Width);
+            Assert.Equal(700, provider.GetRequiredService<SettingsService>().Current.OverlayWidth);
+            vm.SettingsFlyout.OverlayWidth = 0;
+            Assert.Equal(300, window.Width);
+            vm.SettingsFlyout.ShowBothMetrics = true;
+            Assert.Equal(420, window.Width);
             historyWindow.Close(); settingsWindow.Close();
             provider.DisposeAsync().AsTask().GetAwaiter().GetResult();
         });

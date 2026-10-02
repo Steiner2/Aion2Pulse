@@ -2,7 +2,8 @@ param(
     [switch]$Test,
     [switch]$Publish,
     [switch]$Offline,
-    [string]$PublishFolder = 'artifacts\Aion2Pulse-0.3.3'
+    [string]$PublishFolder = 'artifacts\Aion2Pulse-0.4.0-preview.1',
+    [string]$PackageFileName = 'Aion2Pulse-win-x64.zip'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
@@ -39,12 +40,13 @@ try {
         $packageDocs = Join-Path $publishDirectory 'docs'
         New-Item -ItemType Directory -Path $packageDocs -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/assets') -Destination $packageDocs -Recurse -Force
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/packet-analysis-roadmap.md') -Destination $packageDocs
         $manifest = Get-ChildItem -LiteralPath $publishDirectory -File | ForEach-Object {
             [pscustomobject]@{ Name = $_.Name; Length = $_.Length; SHA256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
         }
         $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $projectRoot 'artifacts\pulse-publish-manifest.json')
         $packageItems = Get-ChildItem -LiteralPath $publishDirectory | Where-Object { $_.Name -notin 'history', 'logs' -and $_.Extension -ne '.pdb' }
-        Compress-Archive -Path $packageItems.FullName -DestinationPath (Join-Path $projectRoot 'artifacts\Aion2Pulse-win-x64.zip') -Force
+        Compress-Archive -Path $packageItems.FullName -DestinationPath (Join-Path (Join-Path $projectRoot 'artifacts') $PackageFileName) -Force
     }
 } finally {
     Pop-Location

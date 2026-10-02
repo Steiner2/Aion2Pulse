@@ -43,9 +43,7 @@ public sealed partial class EncounterArchiveService
                 { _unreadableFiles.Add(path); StorageError = $"Skipped damaged history file: {Path.GetFileName(path)} ({e.Message})"; }
             }
             _history.Sort((a, b) => b.ArchivedAt.CompareTo(a.ArchivedAt));
-            foreach (var removed in _history.Skip(MaxHistoryCount))
-                _historyByEncounterId.Remove(removed.ScenePayload.Snapshot.EncounterId);
-            if (_history.Count > MaxHistoryCount) _history.RemoveRange(MaxHistoryCount, _history.Count - MaxHistoryCount);
+            TrimHistory();
             _historySnapshot = [.. _history];
             PruneFiles();
         }

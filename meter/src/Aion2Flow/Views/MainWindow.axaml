@@ -14,7 +14,7 @@
         CanResize="False"
         CanMaximize="False"
         ShowActivated="False"
-        Title="Aion2Pulse"
+        Title="Aion2Pulse Preview"
         Icon="/Assets/Images/Aion2Pulse.png">
 
     <Window.Styles>
@@ -397,6 +397,7 @@
 
             </Grid>
         </Border>
+        <Thumb Grid.Row="3" Width="12" Height="14" HorizontalAlignment="Right" VerticalAlignment="Bottom" Cursor="SizeWestEast" DragDelta="ResizePulseWidth" ToolTip.Tip="Drag to change width while unlocked"><Thumb.Template><ControlTemplate><Border Background="#405463" CornerRadius="2" Margin="3" /></ControlTemplate></Thumb.Template></Thumb>
     </Grid>
 
     <FlyoutBase.AttachedFlyout>

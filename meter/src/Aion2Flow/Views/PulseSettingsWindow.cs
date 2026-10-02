@@ -33,6 +33,8 @@ public sealed class PulseSettingsWindow : Window
             Check("Short numbers · 2.48m / 29.5k", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.UseCompactMainMetrics, mode: BindingMode.TwoWay)),
             Range("Interface scale (%)", CompiledBinding.Create<SettingsFlyoutViewModel, int>(x => x.UiScalePercent, mode: BindingMode.TwoWay), 50, 200)));
         tabs.Items.Add(Page("Overlay", "A 24 px title bar keeps the playfield visible.",
+            Range("Overlay width · 0 = automatic", CompiledBinding.Create<SettingsFlyoutViewModel, int>(x => x.OverlayWidth, mode: BindingMode.TwoWay), 0, 1000),
+            Text("Automatic uses a compact width. Drag the bottom-right grip while unlocked to resize. Combined DPS/HPS keeps four readable columns."),
             EnumChoice<TopmostMode>("Keep on top", CompiledBinding.Create<SettingsFlyoutViewModel, TopmostMode>(x => x.TopmostMode, mode: BindingMode.TwoWay)),
             Choice("Visible rows", CompiledBinding.Create<SettingsFlyoutViewModel, int>(x => x.MaxVisibleCombatantRows, mode: BindingMode.TwoWay), vm.RowCountOptions),
             EnumChoice<CombatantSortMetric>("Display and sorting", CompiledBinding.Create<SettingsFlyoutViewModel, CombatantSortMetric>(x => x.CombatantSortMetric, mode: BindingMode.TwoWay)),
@@ -57,14 +59,14 @@ public sealed class PulseSettingsWindow : Window
             EnumChoice<EncounterTimeDisplayFormat>("Time format", CompiledBinding.Create<SettingsFlyoutViewModel, EncounterTimeDisplayFormat>(x => x.EncounterTimeDisplayFormat, mode: BindingMode.TwoWay)),
             Check("Show boss health", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowFocusStatusBar, mode: BindingMode.TwoWay)),
             Check("Enable skill monitor", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.SkillMonitorEnabled, mode: BindingMode.TwoWay))));
-        tabs.Items.Add(Page("History", "Saved locally · retains 50 fights, including their player and skill details.",
+        tabs.Items.Add(Page("History", "Saved locally · retains 50 bosses and 50 normal pulls independently.",
             EnumChoice<HistoryLayout>("History layout", CompiledBinding.Create<SettingsFlyoutViewModel, HistoryLayout>(x => x.HistoryLayout, mode: BindingMode.TwoWay)),
             Text("Filter by boss, incomplete result or encounter name. Select a player to inspect damage, healing and original skill icons."),
             Text("Instance totals use combined combat time, excluding breaks between fights.")));
         tabs.Items.Add(Page("Capture", "Passive network packet recording.", Text("Global Early Access · network only"),
             Text("Capture starts with the meter. Driver, game port and connection status remain visible in the footer."),
             Text("Healing shows amounts reported by the packets. Shield absorption is kept separate in player details.")));
-        tabs.Items.Add(Page("About", "Aion2Pulse", Text("Version 0.3.3"), Text("Based on the Aion2Flow packet engine. GPL-3.0 license and upstream credits are included in the package.")));
+        tabs.Items.Add(Page("About", "Aion2Pulse Preview", Text("Version 0.4.0-preview.1 · Experimental"), Text("Based on the Aion2Flow packet engine. GPL-3.0 license and upstream credits are included in the package.")));
         var done = new Button { Content = "Done", HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(22, 7) };
         done.Click += (_, _) => Close();
         var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(20, 10) };

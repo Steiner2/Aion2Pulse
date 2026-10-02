@@ -6,6 +6,25 @@ namespace Cloris.Aion2Flow.SceneRuntime.Archive;
 public sealed partial class EncounterArchiveService : IAsyncDisposable
 {
     public const int MaxHistoryCount = 50;
+    public const int MaxBossHistoryCount = 50;
+
+    public static bool IsBossEncounter(SceneCombatSnapshot snapshot)
+        => snapshot.BossNpcCodes.Count > 0 || snapshot.BossFocuses.Count > 0;
+
+    private void TrimHistory()
+    {
+        var bosses = 0;
+        var pulls = 0;
+        for (var i = 0; i < _history.Count;)
+        {
+            var record = _history[i];
+            var keep = IsBossEncounter(record.ScenePayload.Snapshot)
+                ? ++bosses <= MaxBossHistoryCount : ++pulls <= MaxHistoryCount;
+            if (keep) { i++; continue; }
+            _history.RemoveAt(i);
+            _historyByEncounterId.Remove(record.ScenePayload.Snapshot.EncounterId);
+        }
+    }
 
     private readonly Lock _lock = new();
     private readonly List<ArchivedEncounterRecord> _history = [];
@@ -50,15 +69,7 @@ public sealed partial class EncounterArchiveService : IAsyncDisposable
             _history.Insert(0, record);
             Overall.Add(scenePayload);
             _historyByEncounterId[archivedSnapshot.EncounterId] = record;
-            if (_history.Count > MaxHistoryCount)
-            {
-                for (var i = MaxHistoryCount; i < _history.Count; i++)
-                {
-                    _historyByEncounterId.Remove(_history[i].ScenePayload.Snapshot.EncounterId);
-                }
-
-                _history.RemoveRange(MaxHistoryCount, _history.Count - MaxHistoryCount);
-            }
+            TrimHistory();
 
             _historySnapshot = [.. _history];
             QueueSave(record);

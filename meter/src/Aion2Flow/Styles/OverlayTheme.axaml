@@ -1588,4 +1588,8 @@
         <Setter Property="FontSize" Value="11" />
         <Setter Property="Opacity" Value="0.75" />
     </Style>
+    <Style Selector="Grid.MainHudShell.combined controls|NumericBlock.PulseRate">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Grid.Row" Value="0" />
+    </Style>
 </Styles>

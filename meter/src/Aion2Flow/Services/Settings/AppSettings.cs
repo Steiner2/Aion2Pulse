@@ -13,6 +13,7 @@ public sealed class AppSettings
     public int SurfaceIntensity { get; set => field = Math.Clamp(value, 40, 100); } = 85;
     public bool UseClassColors { get; set; } = true;
     public bool ShowBothMetrics { get; set; }
+    public int OverlayWidth { get; set => field = value == 0 ? 0 : Math.Clamp(value, 300, 1000); }
     public TopmostMode TopmostMode { get; set; } = TopmostMode.GameForeground;
 
     public int MaxVisibleCombatantRows { get; set => field = Math.Clamp(value, 5, 10); } = 5;

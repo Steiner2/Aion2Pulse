@@ -458,7 +458,7 @@ public partial class MainWindow : Window
 
     private void OnSettingsFlyoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(SettingsFlyoutViewModel.MeterDesign) or nameof(SettingsFlyoutViewModel.PlayerRowHeight) or nameof(SettingsFlyoutViewModel.SurfaceIntensity) or nameof(SettingsFlyoutViewModel.UiScalePercent) or nameof(SettingsFlyoutViewModel.ShowBothMetrics)) ApplyPulseAppearance();
+        if (e.PropertyName is nameof(SettingsFlyoutViewModel.MeterDesign) or nameof(SettingsFlyoutViewModel.OverlayWidth) or nameof(SettingsFlyoutViewModel.PlayerRowHeight) or nameof(SettingsFlyoutViewModel.SurfaceIntensity) or nameof(SettingsFlyoutViewModel.UiScalePercent) or nameof(SettingsFlyoutViewModel.ShowBothMetrics)) ApplyPulseAppearance();
         if (e.PropertyName == nameof(SettingsFlyoutViewModel.IsAlwaysOnTop))
         {
             if (!SynchronizeOverlayTopmostBand())

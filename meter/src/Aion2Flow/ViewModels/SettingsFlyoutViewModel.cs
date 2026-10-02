@@ -45,6 +45,7 @@ public sealed partial class SettingsFlyoutViewModel : ObservableObject
         try
         {
             MeterDesign = persisted.MeterDesign;
+            OverlayWidth = persisted.OverlayWidth;
             HistoryLayout = persisted.HistoryLayout;
             PlayerRowHeight = persisted.PlayerRowHeight;
             SurfaceIntensity = persisted.SurfaceIntensity;
@@ -604,6 +605,7 @@ public sealed partial class SettingsFlyoutViewModel : ObservableObject
         _settingsService.Update(s =>
         {
             s.MeterDesign = MeterDesign;
+            s.OverlayWidth = OverlayWidth;
             s.HistoryLayout = HistoryLayout;
             s.PlayerRowHeight = PlayerRowHeight;
             s.SurfaceIntensity = SurfaceIntensity;

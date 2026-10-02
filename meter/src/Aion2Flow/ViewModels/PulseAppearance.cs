@@ -13,6 +13,8 @@ public sealed partial class SettingsFlyoutViewModel
     [ObservableProperty] public partial int SurfaceIntensity { get; set; } = 85;
     [ObservableProperty] public partial bool UseClassColors { get; set; } = true;
     [ObservableProperty] public partial bool ShowBothMetrics { get; set; }
+    [ObservableProperty] public partial int OverlayWidth { get; set; }
+    partial void OnOverlayWidthChanged(int value) => PersistSettings();
     public bool IsHealingMode => !ShowBothMetrics && (CombatantSortMetric is CombatantSortMetric.HealingPerSecond or CombatantSortMetric.TotalHealing);
     public string MetricModeLabel => ShowBothMetrics ? "DPS+HPS" : RateLabel;
     public bool ShowMetricHeaders => !IsFocusGlass || ShowBothMetrics;
