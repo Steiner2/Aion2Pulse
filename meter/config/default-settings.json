@@ -1,0 +1,15 @@
+{
+  "Language": "en-US",
+  "SceneKind": "Standard",
+  "CombatantStatisticsScope": "Party",
+  "AutoSegmentCombats": true,
+  "CombatIdleSeconds": 5,
+  "PlayerSelfMarkerDisplayMode": "Always",
+  "SkillMonitorEnabled": false,
+  "UiScalePercent": 100,
+  "ShowDamagePerSecondColumn": true,
+  "ShowDamageColumn": true,
+  "ShowTotalDamagePerSecond": true,
+  "ShowBothMetrics": false,
+  "CombatantSortMetric": "DamagePerSecond"
+}

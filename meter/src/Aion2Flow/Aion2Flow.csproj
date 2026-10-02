@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>Aion2Pulse</AssemblyName>
+    <Product>Aion2Pulse</Product>
+    <Title>Aion2Pulse</Title>
+    <Version>0.3.1</Version>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../../assets/Aion2Pulse.ico</ApplicationIcon>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Simple" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Windows.CsWin32">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Velopack" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Aion2FlowBackupUpdateFeedUrl)' != ''">
+    <AssemblyMetadata Include="Aion2Flow.BackupUpdateFeedUrl" Value="$(Aion2FlowBackupUpdateFeedUrl)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aion2Flow.Capture\Aion2Flow.Capture.csproj" />
+    <ProjectReference Include="..\Aion2Flow.Resources\Aion2Flow.Resources.csproj" />
+    <ProjectReference Include="..\Aion2Flow.SceneRuntime\Aion2Flow.SceneRuntime.csproj" />
+    <ProjectReference Include="..\Aion2Flow.WinDivert\Aion2Flow.WinDivert.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\Images\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Localization\Strings.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Strings.resx</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="Localization\Strings.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Strings.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

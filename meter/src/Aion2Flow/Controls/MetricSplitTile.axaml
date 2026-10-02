@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Cloris.Aion2Flow.Controls"
+             x:Class="Cloris.Aion2Flow.Controls.MetricSplitTile"
+             x:DataType="controls:MetricSplitTile"
+             x:Name="Root">
+    <Border Classes="MetricCardSurface">
+        <StackPanel Spacing="4">
+            <TextBlock Classes="MetricLabel"
+                       Text="{Binding Label, ElementName=Root}" />
+            <StackPanel Orientation="Horizontal"
+                        Spacing="4">
+                <controls:NumericBlock Classes="MetricSplitValue"
+                                       Value="{Binding PrimaryValue, ElementName=Root}"
+                                       Formatter="{Binding PrimaryFormatter, ElementName=Root}"
+                                       Prefix="{Binding PrimaryPrefix, ElementName=Root}"
+                                       Suffix="{Binding PrimarySuffix, ElementName=Root}" />
+                <TextBlock Classes="MetricSplitSlash"
+                           Text="/" />
+                <controls:NumericBlock Classes="MetricSplitSecondary"
+                                       Value="{Binding SecondaryValue, ElementName=Root}"
+                                       Formatter="{Binding SecondaryFormatter, ElementName=Root}"
+                                       Prefix="{Binding SecondaryPrefix, ElementName=Root}"
+                                       Suffix="{Binding SecondarySuffix, ElementName=Root}" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

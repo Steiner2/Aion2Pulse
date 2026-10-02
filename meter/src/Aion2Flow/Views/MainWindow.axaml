@@ -1,0 +1,409 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:markups="clr-namespace:Cloris.Aion2Flow.Markups"
+        xmlns:vm="clr-namespace:Cloris.Aion2Flow.ViewModels"
+        xmlns:controls="clr-namespace:Cloris.Aion2Flow.Controls"
+        xmlns:views="clr-namespace:Cloris.Aion2Flow.Views"
+        x:Class="Cloris.Aion2Flow.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Classes="OverlayWindow"
+        WindowDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Width="440"
+        SizeToContent="Height"
+        CanResize="False"
+        CanMaximize="False"
+        ShowActivated="False"
+        Title="Aion2Pulse"
+        Icon="/Assets/Images/Aion2Pulse.png">
+
+    <Window.Styles>
+        <StyleInclude Source="avares://Aion2Pulse/Styles/OverlayTheme.axaml" />
+    </Window.Styles>
+
+    <Grid x:Name="MainHudShell"
+          Classes="MainHudShell" Classes.focus="{Binding SettingsFlyout.IsFocusGlass}"
+          Grid.IsSharedSizeScope="True"
+          RowDefinitions="Auto,Auto,Auto,Auto"
+          RowSpacing="0"
+          PointerEntered="MainHudShellPointerEntered"
+          controls:DisplayContextProvider.DisplayContext="{Binding DisplayContext}">
+        <Border Grid.Row="0"
+                Classes="MainHudHeader">
+            <Grid>
+                <Border Classes="MainHudHeaderBackdrop"
+                        IsHitTestVisible="False" />
+
+                <Grid Classes="MainHudForeground"
+                      ColumnDefinitions="Auto,*,Auto"
+                      ColumnSpacing="2"
+                      Margin="1,0">
+                    <StackPanel Grid.Column="0"
+                                Classes="TitleBarActions"
+                                Orientation="Horizontal"
+                                Spacing="2">
+                        <Button Classes="WindowBtn RefreshBtn"
+                                Command="{Binding ResetCommand}"
+                                IsEnabled="{Binding IsCapturing}"
+                                ToolTip.Tip="{markups:Translate Action_BattleReset}">
+                            <Path Classes="Glyph GlyphSm" Data="{StaticResource rotate-cw}" />
+                        </Button>
+
+                        <Button x:Name="EncounterHistoryButton" Click="OpenHistory"
+                                Classes="WindowBtn"
+                                Classes.active="{Binding IsViewingArchivedEncounter}"
+                                ToolTip.Tip="{Binding HistoryStorageStatus}">
+                            <Path Classes="Glyph GlyphMd" Data="{StaticResource history}" />
+
+                        </Button>
+                    </StackPanel>
+
+                    <Border Grid.Column="1"
+                            Classes="TitleBarDragRegion"
+                            PointerPressed="TitleBarDragRegionPointerPressed">
+                        <TextBlock Text="Aion2Pulse" FontSize="11" Foreground="#E8F1F5" VerticalAlignment="Center" />
+                    </Border>
+
+                    <StackPanel Grid.Column="2"
+                                Classes="TitleBarActions"
+                                Orientation="Horizontal"
+                                Spacing="2">
+                        <Button x:Name="MetricModeButton" Classes="WindowBtn" Click="ToggleHealing" ToolTip.Tip="Cycle DPS, HPS and DPS + HPS" Width="60"><TextBlock Text="{Binding SettingsFlyout.MetricModeLabel}" FontSize="10" /></Button>
+                        <Button Classes="WindowBtn" Click="OpenSettings" ToolTip.Tip="Settings"><Path Classes="Glyph GlyphSm" Data="{StaticResource settings}" /></Button>
+                        <Button Classes="WindowBtn MinBtn"
+                                Click="Minimize">
+                            <Path Classes="Glyph GlyphSm" Data="{StaticResource minus}" />
+                        </Button>
+
+                        <Button Classes="WindowBtn CloseBtn"
+                                Click="Exit">
+                            <Path Classes="Glyph GlyphSm" Data="{StaticResource x}" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1"
+                Grid.RowSpan="3"
+                Classes="MainHudContentBackdrop"
+                IsHitTestVisible="False" />
+
+        <ItemsControl Grid.Row="1"
+                      Classes="BossFocusList MainHudForeground"
+                      ItemsSource="{Binding BossFocuses}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Vertical" Spacing="2" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:BossFocusViewModel">
+                    <Border Classes="BossFocusPanel">
+                        <Grid Height="26"
+                              Margin="4,2,4,4">
+                            <controls:BossFocusProgressBar Classes="BossFocusHpBar"
+                                                           Segment="{Binding BarSegment}"
+                                                           IsHitTestVisible="False" />
+
+                            <Grid Margin="16,0,5,0"
+                                  ColumnSpacing="6"
+                                  IsHitTestVisible="False">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="BossMetricPrimary" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="BossMetricSecondary" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="BossMetricTertiary" />
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0"
+                                      ColumnDefinitions="*,Auto"
+                                      ColumnSpacing="4"
+                                      MinWidth="0"
+                                      VerticalAlignment="Center">
+                                    <controls:NpcDisplay Grid.Column="0"
+                                                         Classes="BossFocusName"
+                                                         ShowIcon="False"
+                                                         IconSpacing="0"
+                                                         EntityId="{Binding InstanceId}"
+                                                         NpcCode="{Binding NpcCode}"
+                                                         HorizontalAlignment="Stretch"
+                                                         VerticalAlignment="Center" />
+                                    <Border Grid.Column="1"
+                                            Classes="BossFocusCountBadge"
+                                            IsVisible="{Binding HasMultipleInstances}"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Classes="BossFocusCountText"
+                                                   Text="{Binding InstanceCountText}" />
+                                    </Border>
+                                </Grid>
+
+                                <controls:NumericBlock Grid.Column="1"
+                                                       Classes="BossFocusHp"
+                                                       Value="{Binding Hp}"
+                                                       Formatter="N0"
+                                                       UseCompactNotation="{Binding $parent[Window].DataContext.CombatantColumns.UseCompactMainMetrics}"
+                                                       CompactThreshold="1000"
+                                                       CompactSignificantDigits="3"
+                                                       IsVisible="{Binding IsHpVisible}"
+                                                       VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1"
+                                           Classes="BossFocusHpMuted"
+                                           Text="--"
+                                           IsVisible="{Binding IsHpUnknown}"
+                                           VerticalAlignment="Center" />
+
+                                <controls:NumericBlock Grid.Column="2"
+                                                       Classes="BossFocusHpMuted"
+                                                       Value="{Binding MaxHp}"
+                                                       Formatter="N0"
+                                                       UseCompactNotation="{Binding $parent[Window].DataContext.CombatantColumns.UseCompactMainMetrics}"
+                                                       CompactThreshold="1000"
+                                                       CompactSignificantDigits="3"
+                                                       IsVisible="{Binding IsMaxHpVisible}"
+                                                       VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2"
+                                           Classes="BossFocusHpMuted"
+                                           Text="--"
+                                           IsVisible="{Binding IsMaxHpUnknown}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2"
+                                           Classes="BossFocusHpMuted"
+                                           Text="--"
+                                           IsVisible="{Binding IsHpUnknown}"
+                                           VerticalAlignment="Center" />
+
+                                <controls:NumericBlock Grid.Column="3"
+                                                       Classes="BossFocusPercent"
+                                                       Value="{Binding HpRatio}"
+                                                       Formatter="P0"
+                                                       IsVisible="{Binding IsMaxHpVisible}"
+                                                       VerticalAlignment="Center" />
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <StackPanel Grid.Row="2" Spacing="2">
+        <TextBlock Text="{Binding SegmentStatus}" FontSize="10" Foreground="#A0AFBE" Margin="8,4" />
+        <Grid Classes="PulseMetricHeaders" Loaded="PulseGridLoaded" IsVisible="{Binding SettingsFlyout.ShowMetricHeaders}" Margin="7,5,7,3" ColumnDefinitions="18,*,85,85,0,0,Auto" ColumnSpacing="5">
+            <TextBlock Grid.Column="1" Text="PLAYER" FontSize="9" Foreground="#84939F" />
+            <TextBlock Grid.Column="2" Text="{Binding SettingsFlyout.AmountLabel}" FontSize="9" Foreground="#84939F" TextAlignment="Right" />
+            <TextBlock Grid.Column="3" Text="{Binding SettingsFlyout.RateLabel}" FontSize="9" Foreground="#84939F" TextAlignment="Right" />
+            <TextBlock Grid.Column="4" Text="HEALING" IsVisible="{Binding SettingsFlyout.ShowBothMetrics}" FontSize="9" Foreground="#84939F" TextAlignment="Right" />
+            <TextBlock Grid.Column="5" Text="HPS" IsVisible="{Binding SettingsFlyout.ShowBothMetrics}" FontSize="9" Foreground="#84939F" TextAlignment="Right" />
+        </Grid>
+        <controls:AnimatedItemsView
+                                     Classes="MainHudForeground"
+                                     ItemSpacing="1"
+                                     ItemsSource="{Binding Combatants}"
+                                     SelectedItem="{Binding SelectedCombatant, Mode=TwoWay}"
+                                     MaxVisibleItems="{Binding SettingsFlyout.MaxVisibleCombatantRows}"
+                                     ItemHeight="{Binding SettingsFlyout.EffectiveRowHeight}"
+                                     MoveDuration="0:0:0"
+                                     AddRemoveDuration="0:0:0"
+                                     AddRemoveOffset="0">
+            <controls:AnimatedItemsView.EmptyTemplate>
+                <DataTemplate x:DataType="vm:MainViewModel">
+                    <Border Padding="0,10">
+                        <TextBlock Classes="OverlayMutedText OverlayEmptyStateText"
+                                   Text="{markups:Translate Empty_Combatants}"
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center" />
+                    </Border>
+                </DataTemplate>
+            </controls:AnimatedItemsView.EmptyTemplate>
+
+            <controls:AnimatedItemsView.ItemTemplate>
+                <DataTemplate x:DataType="vm:CombatantRowViewModel">
+                    <Border Name="RowRoot"
+                            Classes="OverlayRowCard"
+                            Tapped="CombatantRowTapped">
+                        <Grid>
+                            <controls:QuestSelectionHighlight Classes="CombatantRowSelection"
+                                                              IsActive="{Binding $parent[controls:AnimatedItemsViewItem].IsSelected}"
+                                                              IsHitTestVisible="False" />
+
+                            <controls:SlantedProgressBar Classes="CombatantRowBar"
+                                                         Segment="{Binding BarSegment}"
+                                                         IsHitTestVisible="False" />
+
+                            <Grid Classes="PlayerMetricsGrid" Loaded="PulseGridLoaded" Margin="7,0" ColumnSpacing="5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="18" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="85" />
+                                    <ColumnDefinition Width="85" />
+                                    <ColumnDefinition Width="0" />
+                                    <ColumnDefinition Width="0" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="CombatantMetricTertiary" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Rank}" Foreground="#E0E6EB"
+                                           FontSize="11" VerticalAlignment="Center" />
+                                <controls:PcDisplay Grid.Column="1"
+                                                    Classes="OverlayRowName PulsePlayer"
+                                                    IconSize="22"
+                                                    IconSpacing="4"
+                                                    EntityId="{Binding Id}"
+                                                    VerticalAlignment="Stretch" />
+
+                                <controls:NumericBlock Grid.Column="3"
+                                                       Classes="OverlayRowMetricStrong PulseRate"
+                                                       Value="{Binding DisplayRate}"
+                                                       IsVisible="{Binding Columns.ShowDamagePerSecondColumn}"
+                                                       VerticalAlignment="Center"
+                                                       StableWidthScopeKey="{Binding Id}"
+                                                       UseCompactNotation="{Binding Columns.UseCompactMainMetrics}"
+                                                       Formatter="N0"
+                                                       CompactThreshold="1000"
+                                                       CompactSignificantDigits="3"
+                                                       Margin="6,0,0,0"
+                                                       Suffix=" /s" />
+
+                                <controls:NumericBlock Grid.Column="2"
+                                                       Classes="OverlayRowMetric PulseAmount"
+                                                       Value="{Binding DisplayAmount}"
+                                                       IsVisible="{Binding Columns.ShowDamageColumn}"
+                                                       VerticalAlignment="Center"
+                                                       StableWidthScopeKey="{Binding Id}"
+                                                       UseCompactNotation="{Binding Columns.UseCompactMainMetrics}"
+                                                       Formatter="N0"
+                                                       CompactThreshold="1000"
+                                                       CompactSignificantDigits="3"
+                                                       Margin="6,0,0,0" />
+
+                                <controls:NumericBlock Grid.Column="4" Classes="OverlayRowMetric PulseHealing"
+                                                       Value="{Binding Healing}"
+                                                       IsVisible="{Binding $parent[Window].DataContext.SettingsFlyout.ShowBothMetrics}"
+                                                       VerticalAlignment="Center" TextAlignment="Right"
+                                                       UseCompactNotation="{Binding Columns.UseCompactMainMetrics}"
+                                                       Formatter="N0" CompactThreshold="1000" CompactSignificantDigits="3" />
+                                <controls:NumericBlock Grid.Column="5" Classes="OverlayRowMetricStrong PulseHps"
+                                                       Value="{Binding HealingPerSecond}"
+                                                       IsVisible="{Binding $parent[Window].DataContext.SettingsFlyout.ShowBothMetrics}"
+                                                       VerticalAlignment="Center" TextAlignment="Right"
+                                                       UseCompactNotation="{Binding Columns.UseCompactMainMetrics}"
+                                                       Formatter="N0" CompactThreshold="1000" CompactSignificantDigits="3" Suffix=" /s" />
+                                <controls:NumericBlock Grid.Column="6"
+                                                       Classes="CombatantBossShareValue"
+                                                       Value="{Binding BossShareRatio}"
+                                                       IsVisible="{Binding Columns.ShowBossShareColumn}"
+                                                       Formatter="P1"
+                                                       Margin="6,0,0,0"
+                                                       VerticalAlignment="Center" />
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </controls:AnimatedItemsView.ItemTemplate>
+        </controls:AnimatedItemsView>
+        </StackPanel>
+
+        <Border Grid.Row="3"
+                Classes="MainHudFooterSeparator MainHudForeground"
+                IsHitTestVisible="False" />
+
+        <Border Grid.Row="3"
+                Classes="MainHudFooter MainHudForeground">
+            <Grid ColumnDefinitions="Auto,*,Auto"
+                  ColumnSpacing="6"
+                  Margin="2,0">
+                <Button x:Name="SettingsButton" Click="OpenSettings"
+                        Grid.Column="0"
+                        Classes="BottomBarButton"
+                        VerticalAlignment="Center"
+                        ToolTip.Tip="{markups:Translate Settings_Title}">
+                    <Path Classes="Glyph GlyphMd" Data="{StaticResource settings}" />
+
+                </Button>
+
+                <StackPanel Orientation="Horizontal"
+                            Grid.Column="1"
+                            Spacing="6"
+                            VerticalAlignment="Center"
+                            ToolTip.Tip="{Binding Status}">
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="4"
+                                VerticalAlignment="Center">
+                        <Border Classes="BottomBarStatusIndicator"
+                                Background="{Binding DriverIndicatorColor}"
+                                ToolTip.Tip="{Binding DriverIndicatorToolTip}" />
+                        <Border Classes="BottomBarStatusIndicator"
+                                Background="{Binding GamePortIndicatorColor}"
+                                ToolTip.Tip="{Binding GamePortIndicatorToolTip}" />
+                        <Border Classes="BottomBarStatusIndicator"
+                                Background="{Binding CaptureLockIndicatorColor}"
+                                ToolTip.Tip="{Binding CaptureLockIndicatorToolTip}" />
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="4"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="{Binding LatencyToolTip}">
+                        <Path Classes="Glyph GlyphMd BottomBarSignalGlyph"
+                              Data="{StaticResource wifi}"
+                              Stroke="{Binding LatencyIndicatorColor}" />
+                        <TextBlock Text="{Binding RoundTripTimeDisplay}" FontSize="11" Foreground="#A0AFBE" VerticalAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="3"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Right">
+                    <controls:NumericBlock Classes="BottomBarMetric" Value="{Binding DisplayTotalAmount}"
+                                           UseCompactNotation="True" CompactThreshold="1000" CompactSignificantDigits="3"
+                                           Formatter="N0" Margin="0,0,5,0" ToolTip.Tip="{Binding SettingsFlyout.AmountLabel}" />
+                    <controls:NumericBlock Classes="BottomBarMetric BottomBarTotalDps"
+                                           ToolTip.Tip="{Binding SettingsFlyout.RateLabel}"
+                                           IsVisible="{Binding CombatantColumns.ShowTotalDamagePerSecond}"
+                                           Value="{Binding DisplayTotalRate}"
+                                           Suffix="/s"
+                                           Formatter="N0"
+                                           UseCompactNotation="{Binding CombatantColumns.UseCompactMainMetrics}"
+                                           CompactThreshold="1000"
+                                           CompactSignificantDigits="3"
+                                           StableWidthScopeKey="{Binding NumericStableWidthScopeKey}"
+                                           Margin="0,0,5,0"
+                                           HorizontalAlignment="Right"
+                                           TextAlignment="Right"
+                                           VerticalAlignment="Center" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding SettingsFlyout.ShowBothMetrics}">
+                        <controls:NumericBlock Classes="BottomBarMetric" Value="{Binding TotalFilteredHealing}"
+                                               UseCompactNotation="True" CompactThreshold="1000" CompactSignificantDigits="3"
+                                               Formatter="N0" ToolTip.Tip="Total healing" />
+                        <controls:NumericBlock Classes="BottomBarMetric" Value="{Binding TotalFilteredHealingPerSecond}"
+                                               IsVisible="{Binding CombatantColumns.ShowTotalDamagePerSecond}"
+                                               UseCompactNotation="True" CompactThreshold="1000" CompactSignificantDigits="3"
+                                               Formatter="N0" Suffix=" HPS" ToolTip.Tip="Healing per second" />
+                    </StackPanel>
+                    <controls:DurationBlock Classes="BottomBarMetric"
+                                            Duration="{Binding EncounterDuration}"
+                                            DisplayFormat="{Binding SettingsFlyout.EncounterTimeDisplayFormat}"
+                                            StableWidthScopeKey="{Binding NumericStableWidthScopeKey}"
+                                            Margin="0,0,3,0"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="{markups:Translate Metric_Duration}" />
+
+                    <Border x:Name="OverlayPinSlot"
+                            Width="26"
+                            Height="26"
+                            VerticalAlignment="Center"
+                            IsHitTestVisible="False" />
+                </StackPanel>
+
+            </Grid>
+        </Border>
+    </Grid>
+
+    <FlyoutBase.AttachedFlyout>
+        <Flyout ShowMode="Transient"
+                Closed="FlyoutClosed">
+            <views:CombatantDetailsFlyoutView x:Name="CombatantDetailsFlyoutView"
+                                              DataContext="{Binding CombatantDetails}" />
+        </Flyout>
+    </FlyoutBase.AttachedFlyout>
+</Window>

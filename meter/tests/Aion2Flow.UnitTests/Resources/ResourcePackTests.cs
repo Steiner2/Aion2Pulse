@@ -1,0 +1,425 @@
+using System.Buffers.Binary;
+using System.Collections;
+using System.Reflection;
+using Cloris.Aion2Flow.Resources.Catalog;
+using Cloris.Aion2Flow.Resources.Generated;
+
+namespace Cloris.Aion2Flow.Tests.Resources;
+
+public sealed class ResourcePackTests
+{
+    [Theory]
+    [InlineData(ResourceLanguage.English)]
+    public void Load_Loads_Runtime_Shared_And_Locale_Packs(string language)
+    {
+        var shared = ResourceCatalog.LoadShared();
+        var snapshot = ResourceCatalog.Load(language);
+
+        Assert.Same(shared, snapshot.Shared);
+        Assert.Equal(language, snapshot.Language);
+        Assert.Equal(16_054, snapshot.SkillDefinitions.Count);
+        Assert.Equal(16_054, snapshot.Skills.Count);
+        Assert.Equal(13_014, snapshot.NpcCatalog.Count);
+        Assert.True(snapshot.Maps.Count > 600);
+        Assert.True(snapshot.ServerNames.Count > 100);
+    }
+
+    [Fact]
+    public void LoadShared_Returns_Cached_Shared_Catalog()
+    {
+        var first = ResourceCatalog.LoadShared();
+        var second = ResourceCatalog.LoadShared();
+
+        Assert.Same(first, second);
+    }
+
+    [Fact]
+    public void Load_Rejects_Unsupported_Language()
+        => Assert.Throws<ArgumentOutOfRangeException>(() => ResourceCatalog.Load("ja-JP"));
+
+    [Fact]
+    public void NpcCatalog_Contains_Known_Numeric_Code()
+    {
+        var catalog = ResourceCatalog.Load(ResourceLanguage.English).NpcCatalog;
+
+        Assert.True(catalog.TryGetValue(2000002, out var npc));
+        Assert.Equal("Draconute Ranger", npc.Name);
+        Assert.Equal(NpcCatalogKind.Monster, npc.Kind);
+        Assert.Equal(NpcHpDisplayScale.Normal, npc.HpDisplayScale);
+    }
+
+    [Fact]
+    public void NpcCatalog_Contains_Bridged_Current_Client_Entry()
+    {
+        var catalog = ResourceCatalog.Load(ResourceLanguage.English).NpcCatalog;
+
+        Assert.True(catalog.TryGetValue(2405210, out var npc));
+        Assert.Equal("Thieves Marauder", npc.Name);
+        Assert.Equal(NpcCatalogKind.Monster, npc.Kind);
+    }
+
+    [Theory]
+    [InlineData(2110465, NpcHpDisplayScale.LevelScaled)]
+    [InlineData(2340057, NpcHpDisplayScale.LevelScaled)]
+    [InlineData(2702110, NpcHpDisplayScale.LevelScaled)]
+    [InlineData(2980079, NpcHpDisplayScale.Normal)]
+    public void NpcCatalog_Exposes_Hp_Display_Scale(int npcCode, NpcHpDisplayScale expectedScale)
+    {
+        var catalog = ResourceCatalog.Load(ResourceLanguage.English).NpcCatalog;
+
+        Assert.True(catalog.TryGetValue(npcCode, out var npc));
+        Assert.Equal(expectedScale, npc.HpDisplayScale);
+    }
+
+    [Fact]
+    public void NpcCatalog_Preserves_Runtime_Kinds()
+    {
+        var catalog = ResourceCatalog.Load(ResourceLanguage.English).NpcCatalog;
+
+        Assert.True(catalog.TryGetValue(2920015, out var summon));
+        Assert.Equal("Ensnaring Trap", summon.Name);
+        Assert.Equal(NpcCatalogKind.Summon, summon.Kind);
+        Assert.True(catalog.TryGetValue(2500075, out var trainingDummy));
+        Assert.Equal("Training Scarecrow", trainingDummy.Name);
+        Assert.Equal(NpcCatalogKind.TrainingDummy, trainingDummy.Kind);
+    }
+
+    [Theory]
+    [InlineData(ResourceLanguage.English, 12240010, "Judgment", SkillCategory.Templar, SkillSourceType.PcSkill)]
+    [InlineData(ResourceLanguage.English, 17121450, "Radiant Recovery", SkillCategory.Cleric, SkillSourceType.PcSkill)]
+    [InlineData(ResourceLanguage.English, 11800008, "Murderous Burst", SkillCategory.Gladiator, SkillSourceType.PcSkill)]
+    [InlineData(ResourceLanguage.English, 19010000, "Flurry", SkillCategory.Brawler, SkillSourceType.PcSkill)]
+    [InlineData(ResourceLanguage.English, 19150350, "Ascending Blow [Rampage]", SkillCategory.Brawler, SkillSourceType.PcSkill)]
+    [InlineData(ResourceLanguage.English, 19160351, "Ascending Blow Level 1", SkillCategory.Brawler, SkillSourceType.PcSkill)]
+    [InlineData(ResourceLanguage.English, 16001316, "Wind Spirit: Storm", SkillCategory.Elementalist, SkillSourceType.PcSkill)]
+    [InlineData(ResourceLanguage.English, 3001110, "Theostone: Charna's Root", SkillCategory.Item, SkillSourceType.ClientSkill)]
+    public void Skills_Expose_Runtime_Identity_With_Localized_Text(
+        string language,
+        int skillId,
+        string expectedName,
+        SkillCategory expectedCategory,
+        SkillSourceType expectedSourceType)
+    {
+        var skills = ResourceCatalog.Load(language).Skills;
+
+        Assert.True(skills.TryGetValue(skillId, out var skill));
+        Assert.Equal(expectedName, skill.Name);
+        Assert.Equal(expectedCategory, skill.Category);
+        Assert.Equal(expectedSourceType, skill.SourceType);
+    }
+
+    [Fact]
+    public void Skills_Include_Current_Localized_Npc_Skills()
+    {
+        var skills = ResourceCatalog.Load(ResourceLanguage.English).Skills;
+
+        Assert.True(skills.TryGetValue(1227237, out var attack));
+        Assert.Equal("Attack", attack.Name);
+        Assert.Equal(SkillCategory.Npc, attack.Category);
+        Assert.Equal(SkillSourceType.ClientSkill, attack.SourceType);
+        Assert.True(skills.TryGetValue(1227265, out var namedSkill));
+        Assert.Equal("Wraith Surge", namedSkill.Name);
+    }
+
+    [Fact]
+    public void Skills_Expose_Client_ConsecutiveUseCount()
+    {
+        var skills = ResourceCatalog.Load(ResourceLanguage.English).SkillDefinitions;
+
+        Assert.True(skills.TryGetValue(13_060_250, out var ambush));
+        Assert.Equal(3, ambush.MaxAvailableCount);
+    }
+
+    [Fact]
+    public void RuntimeSemanticIndex_Loads_Compact_Current_Client_Index()
+    {
+        var runtime = ResourceCatalog.LoadShared().SkillSemanticRuntimeIndex;
+
+        Assert.Equal(16_842, runtime.SkillCount);
+        Assert.Equal(26_600, runtime.SlotCount);
+        Assert.True(runtime.NodeCount > 50_000);
+        Assert.True(runtime.NodeSlotReferenceCount > runtime.SlotCount);
+        Assert.True(runtime.TryResolveEffect(101000011, out var directHeal));
+        Assert.Equal(SkillQuantifiedFacet.DirectHealing, directHeal.DirectSemantics.QuantifiedFacets);
+        Assert.Equal(SkillQuantifiedFacet.DirectHealing, directHeal.Semantics.QuantifiedFacets);
+        Assert.True(runtime.TryResolveEffect(1406004012, out var dotApplication));
+        Assert.Equal(SkillQuantifiedFacet.None, dotApplication.DirectSemantics.QuantifiedFacets);
+        Assert.Equal(SkillQuantifiedFacet.PeriodicDamage, dotApplication.Semantics.QuantifiedFacets & SkillQuantifiedFacet.PeriodicDamage);
+        Assert.Equal(SkillAuraFacet.Debuff, dotApplication.Semantics.AuraFacets & SkillAuraFacet.Debuff);
+    }
+
+    [Theory]
+    [InlineData(10_003u)]
+    [InlineData(300_711u)]
+    public void RuntimeSemanticIndex_Classifies_Current_NonQuantified_Abnormal_Effects(uint resourceId)
+    {
+        var runtime = ResourceCatalog.LoadShared().SkillSemanticRuntimeIndex;
+
+        Assert.True(runtime.TryResolvePeriodicResourceReference(resourceId, 0, out var resolution));
+        Assert.Equal(SkillSemanticResourceNodeKind.SkillAbnormalEffect, resolution.NodeKind);
+        Assert.Equal(SkillQuantifiedFacet.None, resolution.DirectSemantics.QuantifiedFacets);
+        Assert.Equal(SkillAuraFacet.None, resolution.DirectSemantics.AuraFacets);
+        Assert.Equal(SkillSemanticKnowledge.KnownNonQuantified, resolution.DirectSemantics.Knowledge);
+    }
+
+    [Fact]
+    public void RuntimeSemanticIndex_Preserves_Domain_Specific_Resource_Resolution()
+    {
+        var runtime = ResourceCatalog.LoadShared().SkillSemanticRuntimeIndex;
+
+        Assert.True(runtime.TryResolveDirectResourceReference(400840, 4008, out var slotResolution));
+        Assert.Equal(SkillSemanticResourceNodeKind.SkillEffectGroup, slotResolution.NodeKind);
+        Assert.Equal(40084, slotResolution.NodeId);
+        Assert.NotNull(slotResolution.Slot);
+        Assert.Equal(4008, slotResolution.Slot!.Value.SkillId);
+        Assert.True(runtime.TryResolveDirectResourceReference(1742001011, 17420010, out var directCollision));
+        Assert.Equal(SkillSemanticResourceNodeKind.SkillEffect, directCollision.NodeKind);
+        Assert.Equal(SkillAuraFacet.Buff, directCollision.Semantics.AuraFacets & SkillAuraFacet.Buff);
+        Assert.True(runtime.TryResolvePeriodicResourceReference(1742001011, 17420010, out var periodicCollision));
+        Assert.Equal(SkillSemanticResourceNodeKind.SkillAbnormalEffect, periodicCollision.NodeKind);
+        Assert.Equal(SkillQuantifiedFacet.Shield, periodicCollision.Semantics.QuantifiedFacets & SkillQuantifiedFacet.Shield);
+    }
+
+    [Theory]
+    [InlineData(11010047, 11420000)]
+    [InlineData(17040250, 17040000)]
+    [InlineData(19010040, 19010000)]
+    [InlineData(19160351, 19150000)]
+    [InlineData(12090230, 12090000)]
+    [InlineData(17040257, 17050000)]
+    [InlineData(16030047, 16030000)]
+    [InlineData(18370047, 18370000)]
+    [InlineData(13130230, 13130000)]
+    [InlineData(13160007, 13160000)]
+    [InlineData(13050240, 13050000)]
+    public void SkillBaseProjections_Contain_Only_NonIdentity_Runtime_Mappings(int skillCode, int expectedBaseSkillId)
+    {
+        var projections = ResourceCatalog.LoadShared().SkillBaseProjections;
+
+        Assert.True(projections.TryGetValue(skillCode, out var projection));
+        Assert.Equal(expectedBaseSkillId, projection.BaseSkillId);
+        Assert.NotEqual(projection.SkillCode, projection.BaseSkillId);
+    }
+
+    [Theory]
+    [InlineData(1227237)]
+    [InlineData(16257000)]
+    public void SkillBaseProjections_Do_Not_Store_Identity_Mappings(int skillCode)
+        => Assert.False(ResourceCatalog.LoadShared().SkillBaseProjections.ContainsKey(skillCode));
+
+    [Theory]
+    [InlineData(30011101u, 3001110)]
+    [InlineData(12272651u, 1227265)]
+    [InlineData(160300471u, 16030047)]
+    [InlineData(170402571u, 17040257)]
+    public void EffectSkillIds_Map_Unambiguous_References_To_Owner_Skills(uint referenceCode, int expectedSkillId)
+    {
+        var effectSkillIds = ResourceCatalog.LoadShared().EffectSkillIds;
+
+        Assert.True(effectSkillIds.TryGetValue(referenceCode, out var skillId));
+        Assert.Equal(expectedSkillId, skillId);
+    }
+
+    [Theory]
+    [InlineData(1, "ICON_TE_SKILL_001.webp")]
+    [InlineData(12240010, "ICON_TE_SKILL_004.webp")]
+    [InlineData(16030047, "ICON_EL_SKILL_003.webp")]
+    [InlineData(16300243, "ICON_EL_SKILL_030.webp")]
+    [InlineData(11250000, "ICON_GL_SKILL_040.webp")]
+    [InlineData(11400000, "ICON_GL_SKILL_024.webp")]
+    [InlineData(17270040, "ICON_CL_SKILL_026.webp")]
+    [InlineData(17280010, "ICON_CL_SKILL_027.webp")]
+    [InlineData(17290000, "ICON_CL_SKILL_028.webp")]
+    [InlineData(17420010, "ICON_CL_SKILL_042.webp")]
+    [InlineData(17440047, "ICON_CL_SKILL_046.webp")]
+    [InlineData(19150350, "ICON_GT_SKILL_015.webp")]
+    [InlineData(19160351, "ICON_GT_SKILL_016.webp")]
+    [InlineData(19190120, "ICON_GT_SKILL_019.webp")]
+    [InlineData(19200120, "ICON_GT_SKILL_020.webp")]
+    [InlineData(16001316, "ICON_EL_SKILL_024.webp")]
+    [InlineData(3001110, "Icon_Item_Usable_Godstone_WP_r_004.webp")]
+    [InlineData(30011101, "Icon_Item_Usable_Godstone_WP_r_004.webp")]
+    public void Generated_SkillIconCatalog_Resolves_Asset_Outside_Pack(int skillCode, string expectedAssetName)
+    {
+        var assetName = SkillIconCatalog.ResolveAssetName(skillCode);
+
+        Assert.Equal(expectedAssetName, assetName);
+        Assert.True(File.Exists(ResolveSkillIconPath(assetName)));
+    }
+
+    [Theory]
+    [InlineData(20u, "Chaotic Lower Reshanta")]
+    [InlineData(23u, "Chaotic Upper Reshanta")]
+    [InlineData(50u, "Pantheon")]
+    [InlineData(60u, "Fire Temple Arena")]
+    [InlineData(63u, "Stormslumber Snowfield")]
+    [InlineData(80u, "Abyss Rift Zone")]
+    [InlineData(1000u, "Poeta")]
+    [InlineData(143008u, "Dharvata Surveillance Base")]
+    [InlineData(154001u, "Cohta Outpost")]
+    [InlineData(200003u, "Nightmare")]
+    [InlineData(503006u, "Abyss Corridor")]
+    [InlineData(600091u, "Ferocious Horn Den")]
+    [InlineData(600153u, "Citadel of the Fallen Daeva")]
+    [InlineData(840037u, "Faded Pulse Library")]
+    public void Maps_Resolve_Client_Table_Scene_Id_Aliases(uint mapId, string expectedName)
+        => Assert.Equal(expectedName, ResourceCatalog.Load(ResourceLanguage.English).ResolveMapName(mapId));
+
+    [Theory]
+    [InlineData(ResourceLanguage.English, 1001, "Siel", "SIE")]
+    [InlineData(ResourceLanguage.English, 2001, "Israphel", "ISR")]
+    public void ServerNames_Resolve_ServerName_Dat_Names(string language, int code, string expectedServerName, string expectedShortServerName)
+    {
+        var snapshot = ResourceCatalog.Load(language);
+
+        Assert.True(snapshot.ServerNames.TryGetValue(code, out var server));
+        Assert.Equal(expectedServerName, server.ServerName);
+        Assert.Equal(expectedShortServerName, server.ShortServerName);
+        Assert.Equal(expectedServerName, snapshot.ResolveServerName(code));
+        Assert.Equal(expectedShortServerName, snapshot.ResolveShortServerName(code));
+    }
+
+    [Fact]
+    public void Runtime_Packs_Contain_Only_Current_Sections()
+    {
+        var manifestType = ResolveGeneratedType("ResourcePackManifest");
+        var sharedResourceName = Assert.IsType<string>(manifestType.GetField("SharedResourceName", BindingFlags.Public | BindingFlags.Static)!.GetValue(null));
+        var sharedUncompressedLength = Assert.IsType<int>(manifestType.GetField("SharedUncompressedLength", BindingFlags.Public | BindingFlags.Static)!.GetValue(null));
+        var locales = ReadLocaleManifestEntries(manifestType);
+
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8], ReadSectionIds(sharedResourceName));
+        Assert.True(sharedUncompressedLength < 3_000_000, $"Shared runtime pack expanded to {sharedUncompressedLength} bytes.");
+        Assert.All(locales.Values, resourceName => Assert.Equal([101, 102, 103, 104], ReadSectionIds(resourceName)));
+    }
+
+    [Fact]
+    public void Manifest_Contains_Shared_And_Locale_Embedded_Packs()
+    {
+        var assembly = typeof(ResourceCatalog).Assembly;
+        var resourceNames = assembly.GetManifestResourceNames().ToHashSet(StringComparer.Ordinal);
+        var manifestType = ResolveGeneratedType("ResourcePackManifest");
+        var sharedResourceName = Assert.IsType<string>(manifestType.GetField("SharedResourceName", BindingFlags.Public | BindingFlags.Static)!.GetValue(null));
+        var locales = ReadLocaleManifestEntries(manifestType);
+
+        Assert.Contains(sharedResourceName, resourceNames);
+        Assert.Equal(
+            new[] { ResourceLanguage.English },
+            locales.Keys.Order(StringComparer.Ordinal).ToArray());
+        Assert.All(locales.Values, resourceName => Assert.Contains(resourceName, resourceNames));
+    }
+
+    [Fact]
+    public void ResourcePackReader_Fails_For_Invalid_Header_Expectations()
+    {
+        var manifestType = ResolveGeneratedType("ResourcePackManifest");
+        var decoderType = ResolveGeneratedType("ResourcePackDecoder");
+        var resourceName = Assert.IsType<string>(manifestType.GetField("SharedResourceName", BindingFlags.Public | BindingFlags.Static)!.GetValue(null));
+        var uncompressedLength = Assert.IsType<int>(manifestType.GetField("SharedUncompressedLength", BindingFlags.Public | BindingFlags.Static)!.GetValue(null));
+        var checksum = Assert.IsType<ulong>(manifestType.GetField("SharedChecksum", BindingFlags.Public | BindingFlags.Static)!.GetValue(null));
+        var sharedPackKind = Assert.IsType<byte>(decoderType.GetField("SharedPackKind", BindingFlags.Public | BindingFlags.Static)!.GetValue(null));
+        var localePackKind = Assert.IsType<byte>(decoderType.GetField("LocalePackKind", BindingFlags.Public | BindingFlags.Static)!.GetValue(null));
+
+        AssertLoadPackPayloadFails("Cloris.Aion2Flow.Resources.Packs.missing.bin", sharedPackKind, uncompressedLength, checksum);
+        AssertLoadPackPayloadFails(resourceName, localePackKind, uncompressedLength, checksum);
+        AssertLoadPackPayloadFails(resourceName, sharedPackKind, uncompressedLength + 1, checksum);
+        AssertLoadPackPayloadFails(resourceName, sharedPackKind, uncompressedLength, checksum + 1);
+    }
+
+    private static Dictionary<string, string> ReadLocaleManifestEntries(Type manifestType)
+    {
+        var locales = Assert.IsType<IEnumerable>(manifestType.GetProperty("Locales", BindingFlags.Public | BindingFlags.Static)!.GetValue(null), exactMatch: false);
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var locale in locales)
+        {
+            var localeType = locale.GetType();
+            var language = Assert.IsType<string>(localeType.GetProperty("Language")!.GetValue(locale));
+            var resourceName = Assert.IsType<string>(localeType.GetProperty("ResourceName")!.GetValue(locale));
+            result.Add(language, resourceName);
+        }
+
+        return result;
+    }
+
+    private static ushort[] ReadSectionIds(string resourceName)
+    {
+        var manifestType = ResolveGeneratedType("ResourcePackManifest");
+        var decoderType = ResolveGeneratedType("ResourcePackDecoder");
+        var isShared = resourceName.EndsWith("shared.bin", StringComparison.Ordinal);
+        var kindField = isShared ? "SharedPackKind" : "LocalePackKind";
+        var expectedKind = Assert.IsType<byte>(decoderType.GetField(kindField, BindingFlags.Public | BindingFlags.Static)!.GetValue(null));
+        int expectedLength;
+        ulong expectedChecksum;
+        if (isShared)
+        {
+            expectedLength = Assert.IsType<int>(manifestType.GetField("SharedUncompressedLength", BindingFlags.Public | BindingFlags.Static)!.GetValue(null));
+            expectedChecksum = Assert.IsType<ulong>(manifestType.GetField("SharedChecksum", BindingFlags.Public | BindingFlags.Static)!.GetValue(null));
+        }
+        else
+        {
+            var locale = Assert.IsType<IEnumerable>(manifestType.GetProperty("Locales", BindingFlags.Public | BindingFlags.Static)!.GetValue(null), exactMatch: false)
+                .Cast<object>()
+                .Single(entry => string.Equals((string)entry.GetType().GetProperty("ResourceName")!.GetValue(entry)!, resourceName, StringComparison.Ordinal));
+            expectedLength = (int)locale.GetType().GetProperty("UncompressedLength")!.GetValue(locale)!;
+            expectedChecksum = (ulong)locale.GetType().GetProperty("Checksum")!.GetValue(locale)!;
+        }
+
+        var payload = LoadPackPayload(resourceName, expectedKind, expectedLength, expectedChecksum);
+        var cursor = payload.AsSpan();
+        cursor = cursor[(sizeof(uint) + sizeof(ushort))..];
+        var sectionCount = BinaryPrimitives.ReadInt32LittleEndian(cursor);
+        cursor = cursor[sizeof(int)..];
+        var ids = new ushort[sectionCount];
+        for (var i = 0; i < ids.Length; i++)
+        {
+            ids[i] = BinaryPrimitives.ReadUInt16LittleEndian(cursor);
+            cursor = cursor[(sizeof(ushort) + sizeof(int) + sizeof(int) + sizeof(ulong))..];
+        }
+
+        Array.Sort(ids);
+        return ids;
+    }
+
+    private static byte[] LoadPackPayload(string resourceName, byte expectedKind, int expectedUncompressedLength, ulong expectedChecksum)
+    {
+        var method = ResolveCatalogType("ResourcePackReader").GetMethod("LoadPackPayload", BindingFlags.NonPublic | BindingFlags.Static)!;
+        return Assert.IsType<byte[]>(method.Invoke(null, [resourceName, expectedKind, expectedUncompressedLength, expectedChecksum]));
+    }
+
+    private static void AssertLoadPackPayloadFails(string resourceName, byte expectedKind, int expectedUncompressedLength, ulong expectedChecksum)
+    {
+        var method = ResolveCatalogType("ResourcePackReader").GetMethod("LoadPackPayload", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var ex = Assert.Throws<TargetInvocationException>(() => method.Invoke(null, [resourceName, expectedKind, expectedUncompressedLength, expectedChecksum]));
+        Assert.IsType<InvalidDataException>(ex.InnerException);
+    }
+
+    private static Type ResolveGeneratedType(string name)
+        => typeof(ResourceCatalog).Assembly.GetType($"Cloris.Aion2Flow.Resources.Generated.{name}", throwOnError: true)!;
+
+    private static Type ResolveCatalogType(string name)
+        => typeof(ResourceCatalog).Assembly.GetType($"Cloris.Aion2Flow.Resources.Catalog.{name}", throwOnError: true)!;
+
+    private static string ResolveSkillIconPath(string? assetName)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(assetName));
+        foreach (var root in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory }.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            foreach (var current in EnumerateParents(new DirectoryInfo(root)))
+            {
+                var candidate = Path.Combine(current.FullName, "Aion2Flow", "Assets", "Images", "Skills", assetName!);
+                if (File.Exists(candidate))
+                    return candidate;
+                candidate = Path.Combine(current.FullName, "src", "Aion2Flow", "Assets", "Images", "Skills", assetName!);
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+        }
+
+        return assetName!;
+    }
+
+    private static IEnumerable<DirectoryInfo> EnumerateParents(DirectoryInfo? start)
+    {
+        for (var current = start; current is not null; current = current.Parent)
+            yield return current;
+    }
+}

@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="src/Aion2Flow.Resources/Aion2Flow.Resources.csproj" />
+  <Project Path="src/Aion2Flow.Protocol/Aion2Flow.Protocol.csproj" />
+  <Project Path="src/Aion2Flow.SceneRuntime/Aion2Flow.SceneRuntime.csproj" />
+  <Project Path="src/Aion2Flow.Capture/Aion2Flow.Capture.csproj" />
+  <Project Path="src/Aion2Flow.WinDivert/Aion2Flow.WinDivert.csproj" Id="02b4a82b-73d3-4f31-9080-d063062ff950" />
+  <Project Path="src/Aion2Flow/Aion2Flow.csproj" />
+  <Project Path="tests/Aion2Flow.Testing/Aion2Flow.Testing.csproj" />
+  <Project Path="tests/Aion2Flow.UnitTests/Aion2Flow.UnitTests.csproj" />
+</Solution>

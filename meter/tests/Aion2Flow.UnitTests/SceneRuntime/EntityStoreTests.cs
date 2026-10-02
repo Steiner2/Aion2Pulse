@@ -1,0 +1,1897 @@
+using Cloris.Aion2Flow.Resources.Catalog;
+using Cloris.Aion2Flow.SceneRuntime;
+using Cloris.Aion2Flow.SceneRuntime.Identity;
+using Cloris.Aion2Flow.SceneRuntime.Journal;
+using Cloris.Aion2Flow.SceneRuntime.Model;
+using Cloris.Aion2Flow.SceneRuntime.Observation;
+using Cloris.Aion2Flow.SceneRuntime.Projection;
+using Cloris.Aion2Flow.SceneRuntime.Stores;
+
+namespace Cloris.Aion2Flow.Tests.SceneRuntime;
+
+public class EntityStoreTests
+{
+    [Fact]
+    public void EntityStore_Revisions_SeparateIdentityFromVolatileRuntimeState()
+    {
+        var store = new EntityStore();
+
+        store.ApplyNickname(100, "Player");
+
+        Assert.Equal(1, store.IdentityRevision);
+        Assert.Equal(0, store.VolatileStateRevision);
+
+        store.ApplyBattleToggle(200, true);
+        store.ApplyNpc2136State(200, 1, 2);
+
+        Assert.Equal(1, store.IdentityRevision);
+        Assert.Equal(2, store.VolatileStateRevision);
+
+        store.ApplyNpcCode(200, 2_100_001);
+        store.ApplySummon(100, 300);
+
+        Assert.Equal(3, store.IdentityRevision);
+        Assert.Equal(2, store.VolatileStateRevision);
+
+        store.Clear();
+
+        Assert.Equal(4, store.IdentityRevision);
+        Assert.Equal(3, store.VolatileStateRevision);
+    }
+
+    [Fact]
+    public void RuntimeMetadataRegistry_UpsertPcMetadata_PreservesFaction_WhenUnknownArrivesLater()
+    {
+        var registry = new RuntimeMetadataRegistry();
+        registry.UpsertPcMetadata(2007, "Perigee", Faction.Light);
+        registry.UpsertPcMetadata(2007, "Perigee");
+
+        Assert.True(registry.TryGetPcMetadata(2007, out var metadata));
+        Assert.Equal(Faction.Light, metadata.Faction);
+    }
+
+    [Fact]
+    public void RuntimeMetadataRegistry_UpsertPcMetadata_PreservesCharacterClass_WhenNicknameRefreshes()
+    {
+        var registry = new RuntimeMetadataRegistry();
+        registry.UpsertPcMetadata(2007, "Perigee", Faction.Light, CharacterClass.Sorcerer);
+        registry.UpsertPcMetadata(2007, "Perigee");
+
+        Assert.True(registry.TryGetPcMetadata(2007, out var metadata));
+        Assert.Equal(CharacterClass.Sorcerer, metadata.CharacterClass);
+    }
+
+    [Fact]
+    public void RuntimeMetadataRegistry_UpsertPcMetadata_PreservesLocalPlayer_WhenGenericMetadataRefreshes()
+    {
+        var registry = new RuntimeMetadataRegistry();
+        registry.UpsertPcMetadata(2007, "Perigee", Faction.Light, CharacterClass.Elementalist, isLocalPlayer: true);
+        registry.UpsertPcMetadata(2007, "Perigee");
+
+        Assert.True(registry.TryGetPcMetadata(2007, out var metadata));
+        Assert.True(metadata.IsLocalPlayer);
+        Assert.Equal(Faction.Light, metadata.Faction);
+        Assert.Equal(CharacterClass.Elementalist, metadata.CharacterClass);
+    }
+
+    [Fact]
+    public void RuntimeMetadataRegistry_UpsertPcMetadata_PreservesOriginServerId_WhenGenericMetadataRefreshes()
+    {
+        var registry = new RuntimeMetadataRegistry();
+        registry.UpsertPcMetadata(2007, "Perigee", Faction.Light, CharacterClass.Elementalist, originServerId: 1007);
+        registry.UpsertPcMetadata(2007, "Perigee");
+
+        Assert.True(registry.TryGetPcMetadata(2007, out var metadata));
+        Assert.Equal(1007, metadata.OriginServerId);
+    }
+
+    [Fact]
+    public void RuntimeMetadataRegistry_UpsertPcMetadata_PreservesLegionName_WhenGenericMetadataRefreshes()
+    {
+        var registry = new RuntimeMetadataRegistry();
+        registry.UpsertPcMetadata(2007, "Perigee", Faction.Light, CharacterClass.Elementalist, legionName: "Aether");
+        registry.UpsertPcMetadata(2007, "Perigee");
+
+        Assert.True(registry.TryGetPcMetadata(2007, out var metadata));
+        Assert.Equal("Aether", metadata.LegionName);
+    }
+
+    [Fact]
+    public void RuntimeMetadataRegistry_UpsertPcMetadata_PreservesNickname_WhenFieldMetadataArrivesLater()
+    {
+        var registry = new RuntimeMetadataRegistry();
+        registry.UpsertPcMetadata(2007, "Perigee", Faction.Light);
+        registry.UpsertPcMetadata(2007, string.Empty, originServerId: 1007, legionName: "Aether");
+
+        Assert.True(registry.TryGetPcMetadata(2007, out var metadata));
+        Assert.Equal("Perigee", metadata.Nickname);
+        Assert.Equal(1007, metadata.OriginServerId);
+        Assert.Equal("Aether", metadata.LegionName);
+        Assert.Equal(Faction.Light, metadata.Faction);
+    }
+
+    [Fact]
+    public void RuntimeMetadataRegistry_UpsertPcMetadata_KeepsSingleLocalPlayer()
+    {
+        var registry = new RuntimeMetadataRegistry();
+        registry.UpsertPcMetadata(100, "First", characterClass: CharacterClass.Cleric, isLocalPlayer: true);
+        registry.UpsertPcMetadata(200, "Second", characterClass: CharacterClass.Elementalist, isLocalPlayer: true);
+
+        Assert.True(registry.TryGetPcMetadata(100, out var first));
+        Assert.True(registry.TryGetPcMetadata(200, out var second));
+        Assert.False(first.IsLocalPlayer);
+        Assert.True(second.IsLocalPlayer);
+    }
+
+    [Fact]
+    public void SceneBoundaryStore_Clear_ResetsMapIdentity()
+    {
+        var store = new SceneBoundaryStore();
+        store.SetCurrentMap(200003);
+        store.SetMapInstance(515552);
+
+        store.Clear();
+
+        Assert.Equal(0u, store.CurrentMapId);
+        Assert.Equal(0u, store.CurrentMapInstanceId);
+    }
+}
+
+public class DomainEventApplierTests
+{
+    [Fact]
+    public void Applier_ApplyJournal_PopulatesEntityStore()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+
+        journal.AppendState(sceneId, new TimelineStamp { ObservationOrdinal = 0 }, 56688, 0, new StateObservation { EntityId = 56688, StateCode = 2310108 });
+        journal.AppendState(
+            sceneId,
+            new TimelineStamp { OffsetTicks = 1_000 * TimeSpan.TicksPerMillisecond, ObservationOrdinal = 1 },
+            2007,
+            0,
+            new StateObservation { EntityId = 2007, StateCode = 0 });
+
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var applier = new DomainEventApplier(entities, metadata, new CombatStore());
+
+        applier.ApplyJournal(journal);
+
+        Assert.Equal(2, entities.Count);
+        Assert.True(entities.IsKnownEntity(56688));
+        Assert.True(entities.IsKnownEntity(2007));
+    }
+
+    [Fact]
+    public void Applier_CooldownObservations_DoNotPopulateEntityStore()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+        journal.AppendState(
+            sceneId,
+            new TimelineStamp { ObservationOrdinal = 0 },
+            0,
+            0,
+            new StateObservation { EntityId = 0, StateCode = StateCodes.Cooldown4738, Value0 = 17_410_000, Value1 = 2_400 });
+        journal.AppendState(
+            sceneId,
+            new TimelineStamp { ObservationOrdinal = 1 },
+            100,
+            0,
+            new StateObservation { EntityId = 100, StateCode = StateCodes.CooldownStart0238, Value0 = 17_410_020, Value1 = 4_800 });
+        var entities = new EntityStore();
+        var applier = new DomainEventApplier(entities, new SceneBoundaryStore(), new CombatStore());
+
+        applier.ApplyJournal(journal);
+
+        Assert.Equal(0, entities.Count);
+    }
+
+    [Fact]
+    public void Applier_EntityVitalObservation_UpdatesNpcHp()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+
+        journal.AppendState(sceneId, new TimelineStamp { ObservationOrdinal = 0 }, 56688, 0, new StateObservation { EntityId = 56688, StateCode = 2310108 });
+        journal.AppendEntityVital(
+            sceneId,
+            new TimelineStamp { ObservationOrdinal = 1 },
+            56688,
+            0,
+            new EntityVitalObservation(56688, 22_847, 9_000_000));
+
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var applier = new DomainEventApplier(entities, metadata, new CombatStore());
+
+        applier.ApplyJournal(journal);
+
+        Assert.True(applier.EntityVitals.TryGet(56688, out var vital));
+        Assert.Equal(22_847, vital.CurrentHp);
+        Assert.Equal(9_000_000, vital.MaxHp);
+    }
+
+    [Fact]
+    public void Applier_EntityVitalObservation_PreservesLargeNpcHp()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+
+        journal.AppendEntityVital(
+            sceneId,
+            new TimelineStamp { ObservationOrdinal = 0 },
+            56688,
+            0,
+            new EntityVitalObservation(56688, 3_500_000_000L, 4_000_000_000L));
+
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var applier = new DomainEventApplier(entities, metadata, new CombatStore());
+
+        applier.ApplyJournal(journal);
+
+        Assert.True(applier.EntityVitals.TryGet(56688, out var vital));
+        Assert.Equal(3_500_000_000L, vital.CurrentHp);
+        Assert.Equal(4_000_000_000L, vital.MaxHp);
+    }
+
+    [Fact]
+    public void Applier_SummonObservation_SetsOwnerAndKind()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+
+        journal.AppendState(
+            sceneId,
+            new TimelineStamp { ObservationOrdinal = 0 },
+            314,
+            17755,
+            new StateObservation { EntityId = 17755, StateCode = 0, Value0 = 314 });
+
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var applier = new DomainEventApplier(entities, metadata, new CombatStore());
+
+        applier.ApplyJournal(journal);
+
+        Assert.True(entities.TryGet(17755, out var entity));
+        Assert.Equal(314, entity!.OwnerEntityId);
+        Assert.Equal(NpcKind.Summon, entity.Kind);
+    }
+
+    [Fact]
+    public void Applier_TransientEffectControl_RemainsUnownedWithoutPacketOwnership()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+        var owner = new SceneReadModelOwner(journal);
+        const int ownerId = 7206;
+        const int effectSourceId = 73942;
+        const int targetId = 180015;
+
+        journal.AppendState(
+            sceneId,
+            new TimelineStamp { OffsetTicks = 1_000 * TimeSpan.TicksPerMillisecond, ObservationOrdinal = 0 },
+            ownerId,
+            0,
+            new StateObservation { EntityId = ownerId, StateCode = StateCodes.PlayerIdentity, Text = "Owner" });
+        journal.AppendCombat(
+            sceneId,
+            new TimelineStamp { OffsetTicks = 1_100 * TimeSpan.TicksPerMillisecond, ObservationOrdinal = 1, FlushId = 1 },
+            ownerId,
+            0,
+            new CombatWireObservation { SkillCode = 15281240, BodySkillVariantRaw = 15281240, ChainId = targetId },
+            new RawPacketReference { Opcode = 0x0238 });
+        journal.AppendCombat(
+            sceneId,
+            new TimelineStamp { OffsetTicks = 1_480 * TimeSpan.TicksPerMillisecond, ObservationOrdinal = 2, FlushId = 2 },
+            effectSourceId,
+            0,
+            new CombatWireObservation { SkillCode = 15281241, BodySkillVariantRaw = 15281241 },
+            new RawPacketReference { Opcode = 0x0638 });
+        journal.AppendCombat(
+            sceneId,
+            new TimelineStamp { OffsetTicks = 1_620 * TimeSpan.TicksPerMillisecond, ObservationOrdinal = 3, FlushId = 3 },
+            effectSourceId,
+            targetId,
+            new CombatWireObservation
+            {
+                SkillCode = 15281243,
+                BodySkillVariantRaw = 15281243,
+                Damage = 12_000,
+                HitCount = 1,
+                AttemptCount = 1
+            },
+            new RawPacketReference { Opcode = 0x0438 });
+        journal.AppendCombat(
+            sceneId,
+            new TimelineStamp { OffsetTicks = 1_680 * TimeSpan.TicksPerMillisecond, ObservationOrdinal = 4, FlushId = 4 },
+            effectSourceId,
+            targetId,
+            new CombatWireObservation
+            {
+                SkillCode = 15281243,
+                BodySkillVariantRaw = 15281243,
+                Damage = 345,
+                HitCount = 1,
+                AttemptCount = 1
+            },
+            new RawPacketReference { Opcode = 0x0438 });
+
+        owner.Refresh();
+        var snapshot = owner.CreateSnapshot();
+
+        if (owner.Entities.TryGet(effectSourceId, out var effectEntity))
+            Assert.Null(effectEntity.OwnerEntityId);
+        Assert.True(snapshot.Combatants.TryGetValue(effectSourceId, out var effectCombatant));
+        Assert.Equal(12_345, effectCombatant.DamageAmount);
+        Assert.False(snapshot.Combatants.ContainsKey(ownerId));
+    }
+
+    [Fact]
+    public void Applier_LifecycleReboundEvents_UseSyntheticEntityId()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+        const int reboundId = int.MaxValue - 1;
+
+        journal.AppendState(sceneId, new TimelineStamp { ObservationOrdinal = 0 }, reboundId, 0, new StateObservation { EntityId = reboundId, StateCode = 2000002 });
+        journal.AppendCombat(
+            sceneId,
+            new TimelineStamp { ObservationOrdinal = 1 },
+            100,
+            reboundId,
+            new CombatWireObservation { SkillCode = 11000010, Damage = 500, HitCount = 1, AttemptCount = 1 });
+
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var combat = new CombatStore();
+        var applier = new DomainEventApplier(entities, metadata, combat);
+
+        applier.ApplyJournal(journal);
+
+        Assert.True(entities.TryGet(reboundId, out var entity));
+        Assert.Equal(2000002, entity!.NpcCode);
+        Assert.True(combat.TryGetPair(100, reboundId, out var pair));
+        Assert.Equal(500, pair!.TotalDamage);
+        Assert.False(entities.TryGet(3518, out _));
+    }
+
+    [Fact]
+    public void Applier_NpcExtendedStateObservations_PopulateEntityRecord()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+
+        journal.AppendState(sceneId, new TimelineStamp { ObservationOrdinal = 0 }, 4370, 0, new StateObservation { EntityId = 4370, StateCode = 2136, Value0 = 6, Value1 = 200003 });
+        journal.AppendState(sceneId, new TimelineStamp { ObservationOrdinal = 1 }, 4370, 0, new StateObservation { EntityId = 4370, StateCode = 140, Value0 = 200003 });
+        journal.AppendState(sceneId, new TimelineStamp { ObservationOrdinal = 2 }, 4370, 0, new StateObservation { EntityId = 4370, StateCode = 240, Value0 = 200003 });
+        journal.AppendState(sceneId, new TimelineStamp { ObservationOrdinal = 3 }, 4370, 0, new StateObservation { EntityId = 4370, StateCode = 4636, Value0 = 2, Value1 = 79 });
+        journal.AppendAura(
+            sceneId,
+            new TimelineStamp { ObservationOrdinal = 4 },
+            0,
+            4370,
+            new AuraObservation { Kind = AuraObservationKind.Result, EntityId = 4370, InstanceSequenceId = 95, ResultCode = 7 });
+
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var applier = new DomainEventApplier(entities, metadata, new CombatStore());
+
+        applier.ApplyJournal(journal);
+
+        Assert.True(entities.TryGet(4370, out var entity));
+        Assert.Equal(6L, entity!.Sequence2136);
+        Assert.Equal(200003L, entity.Value2136);
+        Assert.Equal(200003L, entity.Value0140);
+        Assert.Equal(200003L, entity.Value0240);
+        Assert.Equal(((byte)2, (byte)79), entity.State4636);
+        Assert.Equal((95, 7), entity.Latest2C38);
+    }
+
+    [Fact]
+    public void Applier_SceneObservations_StageAndCommitMapIdentity()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+
+        journal.AppendScene(sceneId, new TimelineStamp { ObservationOrdinal = 0 }, 0, 0, new SceneObservation { MapId = 200003, Kind = SceneObservationKind.CurrentMap });
+        journal.AppendScene(sceneId, new TimelineStamp { ObservationOrdinal = 1 }, 0, 0, new SceneObservation { MapInstanceId = 515552, Kind = SceneObservationKind.MapEventRegistered });
+
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var applier = new DomainEventApplier(entities, metadata, new CombatStore());
+
+        applier.ApplyJournal(journal);
+
+        Assert.Equal(200003u, metadata.CurrentMapId);
+        Assert.Equal(515552u, metadata.CurrentMapInstanceId);
+    }
+
+    [Fact]
+    public void Applier_SceneObservations_CommitMapStateImmediately()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+
+        journal.AppendScene(sceneId, new TimelineStamp { ObservationOrdinal = 0 }, 0, 0, new SceneObservation { MapId = 910035, Kind = SceneObservationKind.CurrentMap });
+
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var applier = new DomainEventApplier(entities, metadata, new CombatStore());
+
+        applier.ApplyJournal(journal);
+
+        Assert.Equal(910035u, metadata.CurrentMapId);
+        Assert.Equal(0u, metadata.CurrentMapInstanceId);
+    }
+
+    [Fact]
+    public void Applier_EmptyJournal_DoesNothing()
+    {
+        var journal = new ObservedEventJournal();
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var applier = new DomainEventApplier(entities, metadata, new CombatStore());
+
+        applier.ApplyJournal(journal);
+
+        Assert.Equal(0, entities.Count);
+    }
+
+}
+
+public class CombatStoreTests
+{
+    [Fact]
+    public void CombatStore_ApplyCombat_CreatesPairAndCombatant()
+    {
+        var store = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 500, 1, 1, 1234);
+
+        Assert.True(store.TryGetPair(100, 200, out var pair));
+        Assert.Equal(500, pair!.TotalDamage);
+        Assert.Equal(1, CombatPairProjection.GetPair(store, mechanics, resources, 100, 200)!.Value.HitCount);
+
+        Assert.True(store.TryGetCombatant(100, out var source));
+        Assert.Equal(500, source!.OutgoingDamage);
+        Assert.Equal(1, CombatPairProjection.GetCombatant(store, mechanics, resources, 100)!.Value.OutgoingHits);
+
+        Assert.True(store.TryGetCombatant(200, out var target));
+        Assert.Equal(500, target!.IncomingDamage);
+    }
+
+    [Fact]
+    public void CombatStore_ApplyCombat_AccumulatesMultipleHits()
+    {
+        var store = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 300, 1, 1, 1000);
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 700, 1, 1, 1000);
+
+        Assert.True(store.TryGetPair(100, 200, out var pair));
+        Assert.Equal(1000, pair!.TotalDamage);
+        Assert.Equal(2, CombatPairProjection.GetPair(store, mechanics, resources, 100, 200)!.Value.HitCount);
+
+        Assert.True(store.TryGetCombatant(100, out var source));
+        Assert.Equal(1000, source!.OutgoingDamage);
+        Assert.Equal(2, CombatPairProjection.GetCombatant(store, mechanics, resources, 100)!.Value.OutgoingHits);
+    }
+
+    [Fact]
+    public void CombatStore_OutgoingAndIncomingIndexes()
+    {
+        var store = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 500, 1, 1, 1000);
+        store.ApplyResolvedDamage(mechanics, resources, 100, 300, 300, 1, 1, 2000);
+
+        var outgoing = store.GetOutgoingPairs(100);
+        Assert.Equal(2, outgoing.Count);
+
+        var incoming200 = store.GetIncomingPairs(200);
+        Assert.Single(incoming200);
+
+        var incoming300 = store.GetIncomingPairs(300);
+        Assert.Single(incoming300);
+    }
+
+    [Fact]
+    public void CombatStore_Revision_IncrementsOnEachApply()
+    {
+        var store = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        Assert.Equal(0, store.Revision);
+
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 500, 1, 1, 1000);
+        Assert.Equal(1, store.Revision);
+
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 300, 1, 1, 1000);
+        Assert.Equal(2, store.Revision);
+    }
+
+    [Fact]
+    public void CombatStore_FrozenEventSegment_CrossesStorageBoundary_AndSurvivesAppendAndClear()
+    {
+        var store = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        for (var i = 0; i < CombatEventJournal.SegmentCapacity + 1; i++)
+            store.ApplyResolvedDamage(mechanics, resources, 100, 200, i + 1, 1, 1, i + 1);
+
+        var segment = store.FreezeEventSegment();
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 900, 1, 1, 2_000);
+        store.Clear();
+        mechanics.Clear();
+        resources.Clear();
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 999, 1, 1, 3_000);
+
+        Assert.Equal(CombatEventJournal.SegmentCapacity + 1, segment.Count);
+        Assert.Equal(1, segment.GetEvent(segment.StartEventOrdinal).Observation.Damage);
+        Assert.Equal(CombatEventJournal.SegmentCapacity, segment.GetEvent(CombatEventJournal.SegmentCapacity - 1).Observation.Damage);
+        Assert.Equal(CombatEventJournal.SegmentCapacity + 1, segment.GetEvent(CombatEventJournal.SegmentCapacity).Observation.Damage);
+        Assert.Single(store.Events);
+        Assert.Equal(999, store.Events[0].Observation.Damage);
+    }
+
+    [Fact]
+    public void CombatStore_DetailRevision_TracksAffectedCombatantsOnly()
+    {
+        var store = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 500, 1, 1, 1000);
+
+        Assert.Equal(1, store.GetCombatantDetailRevision(100));
+        Assert.Equal(1, store.GetCombatantDetailRevision(200));
+        Assert.Equal(0, store.GetCombatantDetailRevision(999));
+
+        store.ApplyResolvedDamage(mechanics, resources, 300, 400, 700, 1, 1, 2000);
+
+        Assert.Equal(1, store.GetCombatantDetailRevision(100));
+        Assert.Equal(2, store.GetCombatantDetailRevision(300));
+        Assert.Equal(2, store.GetCombatantDetailRevision(400));
+    }
+
+    [Fact]
+    public void DomainEventApplier_CombatWireObservation_PopulatesCombatStore()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+
+        journal.AppendCombat(
+            sceneId,
+            new TimelineStamp { ObservationOrdinal = 0 },
+            100,
+            200,
+            new CombatWireObservation { SkillCode = 1000, Damage = 500, HitCount = 1, AttemptCount = 1 });
+
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var combat = new CombatStore();
+        var applier = new DomainEventApplier(entities, metadata, combat);
+
+        applier.ApplyJournal(journal);
+
+        Assert.True(combat.TryGetPair(100, 200, out var pair));
+        Assert.Equal(500, pair!.TotalDamage);
+        Assert.Equal(1, combat.Revision);
+        Assert.Equal(1, CombatPairProjection.GetPair(combat, applier.Mechanics, applier.Resources, 100, 200)!.Value.HitCount);
+    }
+}
+
+public class SnapshotChangeFeedTests
+{
+    [Fact]
+    public void CombatStore_ChangeFeed_TracksPairAndCombatantChanges()
+    {
+        var store = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 500, 1, 1, 1000);
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 300, 1, 1, 1000);
+
+        var cursor = store.CreateCursor(0);
+        var batch = store.ReadChanges(cursor, 100);
+
+        Assert.Equal(2, store.Revision);
+        Assert.Equal(6, batch.Changes.Count);
+        Assert.False(batch.HasMore);
+    }
+
+    [Fact]
+    public void CombatStore_ChangeFeed_CursorSkipsAlreadyRead()
+    {
+        var store = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 500, 1, 1, 1000);
+        store.ApplyResolvedDamage(mechanics, resources, 100, 300, 300, 1, 1, 2000);
+
+        var cursor = store.CreateCursor(0);
+        var batch1 = store.ReadChanges(cursor, 3);
+        Assert.Equal(3, batch1.Changes.Count);
+        Assert.True(batch1.HasMore);
+
+        var cursor2 = new SnapshotChangeCursor(batch1.ToRevision, 0);
+        var batch2 = store.ReadChanges(cursor2, 100);
+        Assert.Equal(3, batch2.Changes.Count);
+        Assert.False(batch2.HasMore);
+    }
+
+    [Fact]
+    public void CombatStore_ChangeFeed_DoesNotSplitRevisionGroups()
+    {
+        var store = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        for (int i = 0; i < 30; i++)
+            store.ApplyResolvedDamage(mechanics, resources, 100 + i, 200 + i, 1, 1, 1, 1000 + i);
+
+        var cursor = store.CreateCursor(0);
+        var batch = store.ReadChanges(cursor, 64);
+
+        Assert.Equal(63, batch.Changes.Count);
+        Assert.True(batch.HasMore);
+        Assert.Equal(21, batch.ToRevision);
+
+        var next = store.ReadChanges(new SnapshotChangeCursor(batch.ToRevision, 0), 100);
+
+        Assert.Equal(27, next.Changes.Count);
+        Assert.Equal(22, next.Changes[0].Revision);
+    }
+
+    [Fact]
+    public void CombatStore_ChangeFeed_ReturnsWholeRevisionGroupWhenLimitIsSmaller()
+    {
+        var store = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 1, 1, 1, 1000);
+        store.ApplyResolvedDamage(mechanics, resources, 300, 400, 1, 1, 1, 2000);
+
+        var batch = store.ReadChanges(store.CreateCursor(0), 1);
+
+        Assert.Equal(3, batch.Changes.Count);
+        Assert.True(batch.HasMore);
+        Assert.All(batch.Changes, change => Assert.Equal(1, change.Revision));
+    }
+
+    [Fact]
+    public void CombatStore_ChangeFeed_EmptyWhenNoChanges()
+    {
+        var store = new CombatStore();
+        var cursor = store.CreateCursor(0);
+        var batch = store.ReadChanges(cursor, 100);
+
+        Assert.Empty(batch.Changes);
+        Assert.False(batch.HasMore);
+    }
+
+    [Fact]
+    public void CombatStore_ChangeFeed_OnlyReturnsNewChanges()
+    {
+        var store = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        store.ApplyResolvedDamage(mechanics, resources, 100, 200, 500, 1, 1, 1000);
+
+        var cursor = store.CreateCursor(1);
+        var batch = store.ReadChanges(cursor, 100);
+        Assert.Empty(batch.Changes);
+
+        store.ApplyResolvedDamage(mechanics, resources, 100, 300, 300, 1, 1, 2000);
+        batch = store.ReadChanges(cursor, 100);
+        Assert.Equal(3, batch.Changes.Count);
+    }
+}
+
+public class SceneSnapshotAdapterBasicTests
+{
+    [Fact]
+    public void Adapter_CreateSnapshot_ProducesCombatantEntries()
+    {
+        var entities = new EntityStore();
+        var combat = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        entities.ApplyNickname(100, "Player1");
+        entities.ApplyNpcCode(200, 2310108);
+        combat.ApplyResolvedCombat(mechanics, resources, 100, 200, new CombatWireObservation
+        {
+            SkillCode = 1000,
+            Damage = 1000,
+            HitCount = 5,
+            AttemptCount = 5
+        }, 1_000);
+        combat.ApplyResolvedCombat(mechanics, resources, 100, 200, new CombatWireObservation
+        {
+            SkillCode = 1000,
+            Damage = 1,
+            HitCount = 1,
+            AttemptCount = 1
+        }, 1_001);
+
+        var adapter = new SceneCombatSnapshotAdapter(entities, new EntityVitalStore(), combat, mechanics, resources, new SceneBoundaryStore());
+        var snapshot = adapter.CreateSnapshot();
+
+        Assert.Single(snapshot.Combatants);
+        Assert.True(snapshot.Combatants.ContainsKey(100));
+    }
+
+    [Fact]
+    public void Adapter_CreateSnapshot_ProjectsCombatantFactsWithoutDisplayName()
+    {
+        var entities = new EntityStore();
+        var combat = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        entities.ApplyNickname(100, "Perigee");
+        entities.ApplyNpcCode(200, 9_999_998);
+        combat.ApplyResolvedCombat(mechanics, resources, 100, 200, new CombatWireObservation
+        {
+            SkillCode = 1000,
+            Damage = 500,
+            HitCount = 1,
+            AttemptCount = 1
+        }, 1_000);
+        combat.ApplyResolvedCombat(mechanics, resources, 100, 200, new CombatWireObservation
+        {
+            SkillCode = 1000,
+            Damage = 1,
+            HitCount = 1,
+            AttemptCount = 1
+        }, 1_001);
+
+        var adapter = new SceneCombatSnapshotAdapter(entities, new EntityVitalStore(), combat, mechanics, resources, new SceneBoundaryStore());
+        var snapshot = adapter.CreateSnapshot();
+
+        Assert.Equal(501, snapshot.Combatants[100].DamageAmount);
+    }
+
+    [Fact]
+    public void Adapter_EmptyCombat_ProducesEmptySnapshot()
+    {
+        var entities = new EntityStore();
+        var combat = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+
+        var adapter = new SceneCombatSnapshotAdapter(entities, new EntityVitalStore(), combat, mechanics, resources, new SceneBoundaryStore());
+        var snapshot = adapter.CreateSnapshot();
+
+        Assert.Empty(snapshot.Combatants);
+    }
+
+    [Fact]
+    public void Adapter_CreateSnapshot_UsesMetadataMapIdentity()
+    {
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var combat = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        metadata.SetCurrentMap(200003);
+        metadata.SetMapInstance(515552);
+
+        var adapter = new SceneCombatSnapshotAdapter(entities, new EntityVitalStore(), combat, mechanics, resources, metadata);
+        var snapshot = adapter.CreateSnapshot();
+
+        Assert.Equal(200003u, snapshot.MapId);
+        Assert.Equal(515552u, snapshot.MapInstanceId);
+    }
+}
+
+public class SceneCombatSnapshotAdapterTests
+{
+    [Fact]
+    public void Adapter_CreateSnapshot_ProjectsSceneTotalsAndWindow()
+    {
+        CombatResourceTestFixture.SetResources([], new Dictionary<int, NpcDisplayEntry>
+        {
+            [9_999_999] = new(9_999_999, "Nazarak", NpcCatalogKind.Boss, NpcHpDisplayScale.Normal)
+        });
+
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var combat = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        entities.ApplyNickname(100, "Perigee");
+        entities.ApplyNpcCode(200, 9_999_999);
+        metadata.SetCurrentMap(200003);
+        metadata.SetMapInstance(515552);
+
+        combat.ApplyResolvedCombat(mechanics, resources, 100, 200, new CombatWireObservation
+        {
+            SkillCode = 11000010,
+            Damage = 1500,
+            HitCount = 2,
+            AttemptCount = 2
+        }, 1_000);
+        combat.ApplyResolvedCombat(mechanics, resources, 100, 100, new CombatWireObservation
+        {
+            SkillCode = 17000010,
+            Damage = 600,
+            ResourceKind = CombatResourceKind.Health
+        }, 2_500);
+        combat.ApplyResolvedCombat(mechanics, resources, 100, 100, new CombatWireObservation
+        {
+            SkillCode = 17000011,
+            Damage = 300
+        }, 2_600, CombatPacketRule.PeriodicShieldAbsorbed);
+
+        var adapter = new SceneCombatSnapshotAdapter(entities, new EntityVitalStore(), combat, mechanics, resources, metadata);
+        var snapshot = adapter.CreateSnapshot();
+
+        Assert.Equal(200003u, snapshot.MapId);
+        Assert.Equal(515552u, snapshot.MapInstanceId);
+        Assert.Equal(200, snapshot.TargetObservation?.InstanceId);
+        Assert.Equal(1_000, snapshot.EncounterStartTime);
+        Assert.Equal(2_600, snapshot.EncounterEndTime);
+        Assert.Equal(1_600, snapshot.EncounterTime);
+        Assert.True(snapshot.Encounter.IsActive);
+        var player = snapshot.Combatants[100];
+        Assert.Equal(1500, player.DamageAmount);
+        Assert.Equal(600, player.HealingAmount);
+        Assert.Equal(300, player.ShieldAbsorbedAmount);
+        Assert.Equal(1, player.ShieldAbsorbedTimes);
+    }
+
+    [Fact]
+    public void Adapter_CreateSnapshot_ExpandsSinglePointWindowWithRelevantRecovery()
+    {
+        CombatResourceTestFixture.SetResources(
+        [
+            new SkillDisplayEntry(11000010, "Strike", SkillCategory.Gladiator, SkillSourceType.PcSkill),
+            new SkillDisplayEntry(13000010, "Recover", SkillCategory.Cleric, SkillSourceType.PcSkill)
+        ], new Dictionary<int, NpcDisplayEntry>
+        {
+            [9_999_999] = new(9_999_999, "Nazarak", NpcCatalogKind.Boss, NpcHpDisplayScale.Normal)
+        });
+
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var combat = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        entities.ApplyNickname(100, "Perigee");
+        entities.ApplyNpcCode(200, 9_999_999);
+
+        combat.ApplyResolvedCombat(mechanics, resources, 100, 200, new CombatWireObservation
+        {
+            SkillCode = 11000010,
+            Damage = 1500,
+            HitCount = 1,
+            AttemptCount = 1
+        }, 1_000);
+        combat.ApplyResolvedCombat(mechanics, resources, 100, 100, new CombatWireObservation
+        {
+            SkillCode = 13000010,
+            Damage = 600,
+            ResourceKind = CombatResourceKind.Health
+        }, 2_500);
+
+        var adapter = new SceneCombatSnapshotAdapter(entities, new EntityVitalStore(), combat, mechanics, resources, metadata);
+        var snapshot = adapter.CreateSnapshot();
+
+        var player = snapshot.Combatants[100];
+        Assert.Equal(1500, player.DamageAmount);
+        Assert.Equal(600, player.HealingAmount);
+        Assert.Equal(CharacterClass.Gladiator, player.CharacterClass);
+        Assert.Equal(1_000, snapshot.EncounterStartTime);
+        Assert.Equal(2_500, snapshot.EncounterEndTime);
+        Assert.Equal(1_500, snapshot.EncounterTime);
+        Assert.Equal(1500d / 1500 * 1000, player.DamagePerSecond, 3);
+        Assert.Equal(1d, player.DamageContribution, 3);
+    }
+
+    [Fact]
+    public void Adapter_CreateSnapshot_FoldsSummonOutgoingDamageToOwnerAndSkipsSummonTargets()
+    {
+        CombatResourceTestFixture.SetResources(
+        [
+            new SkillDisplayEntry(16010000, "Cold Shock", SkillCategory.Elementalist, SkillSourceType.PcSkill),
+            new SkillDisplayEntry(16100003, "Fire Spirit: Leaping Slam", SkillCategory.Elementalist, SkillSourceType.Unknown),
+            new SkillDisplayEntry(16990004, "Spirit's Descent Restore", SkillCategory.Elementalist, SkillSourceType.Unknown)
+        ], new Dictionary<int, NpcDisplayEntry>());
+
+        var entities = new EntityStore();
+        var combat = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        entities.ApplyNickname(314, "Owner");
+        entities.ApplySummon(314, 900);
+        entities.ApplyNpcCode(200, 9_999_999);
+
+        combat.ApplyResolvedCombat(mechanics, resources, 314, 200, new CombatWireObservation
+        {
+            SkillCode = 16010000,
+            Damage = 405,
+            HitCount = 1,
+            AttemptCount = 1
+        }, 1_000);
+        combat.ApplyResolvedCombat(mechanics, resources, 900, 200, new CombatWireObservation
+        {
+            SkillCode = 16100003,
+            Damage = 1205,
+            HitCount = 1,
+            AttemptCount = 1
+        }, 1_010);
+
+        var snapshot = new SceneCombatSnapshotAdapter(entities, new EntityVitalStore(), combat, mechanics, resources, new SceneBoundaryStore()).CreateSnapshot();
+
+        Assert.True(snapshot.Combatants.TryGetValue(314, out var owner));
+        Assert.False(snapshot.Combatants.ContainsKey(900));
+        Assert.Equal(1610, owner.DamageAmount);
+        Assert.Equal(CharacterClass.Elementalist, owner.CharacterClass);
+    }
+
+    [Fact]
+    public void Adapter_CreateSnapshot_HidesKnownNpcClassEvenWithPlayerSkill()
+    {
+        CombatResourceTestFixture.SetResources(
+        [
+            new SkillDisplayEntry(11000010, "Strike", SkillCategory.Gladiator, SkillSourceType.PcSkill),
+            new SkillDisplayEntry(99000010, "Boss Slam", SkillCategory.Npc, SkillSourceType.Unknown)
+        ], new Dictionary<int, NpcDisplayEntry>());
+
+        var entities = new EntityStore();
+        var combat = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        entities.ApplyNickname(100, "Player");
+        entities.ApplyNpcCode(200, 9_999_999);
+
+        combat.ApplyResolvedCombat(mechanics, resources, 100, 200, new CombatWireObservation
+        {
+            SkillCode = 11000010,
+            Damage = 500,
+            HitCount = 1,
+            AttemptCount = 1
+        }, 1_000);
+        combat.ApplyResolvedCombat(mechanics, resources, 200, 100, new CombatWireObservation
+        {
+            SkillCode = 11000010,
+            Damage = 300,
+            HitCount = 1,
+            AttemptCount = 1
+        }, 1_100);
+
+        var snapshot = new SceneCombatSnapshotAdapter(entities, new EntityVitalStore(), combat, mechanics, resources, new SceneBoundaryStore()).CreateSnapshot();
+
+        Assert.Equal(CharacterClass.Gladiator, snapshot.Combatants[100].CharacterClass);
+        Assert.Null(snapshot.Combatants[200].CharacterClass);
+    }
+
+    [Fact]
+    public void Adapter_CreateSnapshot_UsesTimelineNowForBossFallbackWithoutCombat()
+    {
+        var entities = new EntityStore();
+        var entityVitals = new EntityVitalStore();
+        var metadata = new SceneBoundaryStore();
+        var combat = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        var bossFocus = new BossFocusStore(entities, entityVitals);
+        entities.ApplyNpcKind(3518, NpcKind.Boss);
+        entities.ApplyBattleToggle(3518, true);
+        bossFocus.ApplyBattle(3518, true, 1_000);
+
+        var snapshot = new SceneCombatSnapshotAdapter(entities, entityVitals, combat, mechanics, resources, metadata, bossFocus).CreateSnapshot();
+
+        Assert.Equal(3518, snapshot.Encounter.TrackingTargetId);
+        Assert.True(snapshot.Encounter.IsActive);
+    }
+
+    [Fact]
+    public void Adapter_CreateSnapshot_ExpiresBossFallbackAgainstLatestSceneObservation()
+    {
+        var entities = new EntityStore();
+        var entityVitals = new EntityVitalStore();
+        var metadata = new SceneBoundaryStore();
+        var combat = new CombatStore();
+        var mechanics = new MechanicStore();
+        var resources = new ResourceStore();
+        var bossFocus = new BossFocusStore(entities, entityVitals);
+        entities.ApplyNpcKind(3518, NpcKind.Boss);
+        entities.ApplyBattleToggle(3518, true);
+        bossFocus.ApplyBattle(3518, true, 1_000);
+        entities.ApplyNickname(100, "Player");
+        entities.ApplyNpcCode(200, 9_999_999);
+
+        combat.ApplyResolvedCombat(mechanics, resources, 100, 200, new CombatWireObservation
+        {
+            SkillCode = 11000010,
+            Damage = 500,
+            HitCount = 1,
+            AttemptCount = 1
+        }, 20_000);
+
+        var snapshot = new SceneCombatSnapshotAdapter(entities, entityVitals, combat, mechanics, resources, metadata, bossFocus).CreateSnapshot();
+
+        Assert.Equal(200, snapshot.Encounter.TrackingTargetId);
+        Assert.NotEqual(3518, snapshot.Encounter.TrackingTargetId);
+    }
+}
+
+public class SceneReadModelOwnerTests
+{
+    [Fact]
+    public void Owner_HasPendingProjectionChanges_TracksJournalAndStoreRevisions()
+    {
+        var journal = new ObservedEventJournal();
+        var owner = new SceneReadModelOwner(journal);
+
+        Assert.True(owner.HasPendingProjectionChanges);
+
+        _ = owner.CreateSnapshot();
+
+        Assert.False(owner.HasPendingProjectionChanges);
+
+        journal.AppendState(
+            Guid.NewGuid(),
+            new TimelineStamp { ObservationOrdinal = 0 },
+            100,
+            0,
+            new StateObservation
+            {
+                EntityId = 100,
+                StateCode = StateCodes.PlayerIdentity,
+                Text = "Player"
+            });
+
+        Assert.True(owner.HasPendingProjectionChanges);
+
+        _ = owner.CreateSnapshot();
+
+        Assert.False(owner.HasPendingProjectionChanges);
+
+        var vital = new EntityVitalObservation(200, 4_000, 5_000);
+        owner.EntityVitals.Apply(in vital, observedAtMilliseconds: 1, observationOrdinal: 1);
+
+        Assert.True(owner.HasPendingProjectionChanges);
+
+        _ = owner.CreateSnapshot();
+
+        Assert.False(owner.HasPendingProjectionChanges);
+    }
+
+    [Fact]
+    public void Owner_CreateSnapshot_ReusesProjectionUntilInputRevisionChanges()
+    {
+        CombatResourceTestFixture.SetResources(BuildSkillMap(), new Dictionary<int, NpcDisplayEntry>());
+
+        using var scene = new SceneTestHarness();
+        scene.AppendNickname(100, "Player");
+        scene.AppendNpcCode(200, 2_999_999);
+        scene.AppendNpcName(2_999_999, "Target");
+        AppendHarnessDamage(scene, 100, 200, 11000010, 500, 1_000);
+
+        var first = scene.CreateSnapshot();
+        var second = scene.Owner.CreateSnapshot();
+
+        Assert.Same(first, second);
+        Assert.Equal(1, scene.Owner.ProjectionCacheStats.SnapshotBuilds);
+        Assert.Equal(1, scene.Owner.ProjectionCacheStats.SnapshotCacheHits);
+
+        AppendHarnessDamage(scene, 100, 200, 11000010, 300, 2_000);
+
+        var third = scene.CreateSnapshot();
+
+        Assert.NotSame(first, third);
+        Assert.Equal(800, third.Combatants[100].DamageAmount);
+        Assert.Equal(2, scene.Owner.ProjectionCacheStats.SnapshotBuilds);
+        Assert.Equal(1, scene.Owner.ProjectionCacheStats.SnapshotCacheHits);
+    }
+
+    [Fact]
+    public void Owner_CreateSnapshot_Uses_Metadata_Class_Over_Skill_Evidence()
+    {
+        CombatResourceTestFixture.SetResources(BuildSkillMap(), new Dictionary<int, NpcDisplayEntry>());
+
+        using var scene = new SceneTestHarness();
+        scene.AppendNickname(100, "Player", characterClass: CharacterClass.Cleric);
+        scene.AppendNpcCode(200, 2_999_999);
+        scene.AppendNpcName(2_999_999, "Target");
+        AppendHarnessDamage(scene, 100, 200, 11000010, 500, 1_000);
+        AppendHarnessDamage(scene, 100, 200, 11000010, 300, 2_000);
+
+        var snapshot = scene.CreateSnapshot();
+
+        Assert.Equal(CharacterClass.Cleric, snapshot.Combatants[100].CharacterClass);
+        Assert.True(scene.Owner.MetadataRegistry.TryGetPcMetadata(100, out var metadata));
+        Assert.Equal(CharacterClass.Cleric, metadata.CharacterClass);
+    }
+
+    [Fact]
+    public void Owner_CreateSnapshot_Metadata_Class_Overrides_Previous_Skill_Evidence()
+    {
+        CombatResourceTestFixture.SetResources(BuildSkillMap(), new Dictionary<int, NpcDisplayEntry>());
+
+        using var scene = new SceneTestHarness();
+        scene.AppendNickname(100, "Player");
+        scene.AppendNpcCode(200, 2_999_999);
+        scene.AppendNpcName(2_999_999, "Target");
+        AppendHarnessDamage(scene, 100, 200, 11000010, 500, 1_000);
+        AppendHarnessDamage(scene, 100, 200, 11000010, 300, 2_000);
+
+        var inferred = scene.CreateSnapshot();
+        Assert.Equal(CharacterClass.Gladiator, inferred.Combatants[100].CharacterClass);
+
+        scene.AppendNickname(100, "Player", characterClass: CharacterClass.Cleric);
+        var corrected = scene.CreateSnapshot();
+
+        Assert.Equal(CharacterClass.Cleric, corrected.Combatants[100].CharacterClass);
+    }
+
+    [Fact]
+    public void Owner_CreateSnapshot_DoesNotInvalidateCacheForNpcNameEventButInvalidatesForEntityAndBossFocusChanges()
+    {
+        CombatResourceTestFixture.SetResources(BuildSkillMap(), new Dictionary<int, NpcDisplayEntry>());
+
+        using var scene = new SceneTestHarness();
+        scene.AppendNickname(100, "Player");
+        scene.AppendNpcKind(200, NpcKind.Boss);
+        scene.AppendNpcCode(200, 2_999_999);
+        scene.SetNpcBattle(200, true, 900);
+        AppendHarnessDamage(scene, 100, 200, 11000010, 500, 1_000);
+
+        var first = scene.CreateSnapshot();
+        var cached = scene.Owner.CreateSnapshot();
+        Assert.Same(first, cached);
+
+        scene.AppendNpcName(2_999_999, "Renamed Target");
+        var ignoredNpcName = scene.Owner.CreateSnapshot();
+        Assert.Same(first, ignoredNpcName);
+
+        scene.AppendNickname(100, "Renamed Player");
+        var entityChanged = scene.Owner.CreateSnapshot();
+        Assert.NotSame(ignoredNpcName, entityChanged);
+
+        scene.AppendNpcHp(200, 1234, 5000, 2_000);
+        var bossChanged = scene.Owner.CreateSnapshot();
+        Assert.NotSame(entityChanged, bossChanged);
+        Assert.Contains(bossChanged.BossFocuses, static boss => boss.InstanceId == 200 && boss.Hp == 1234);
+
+        Assert.Equal(3, scene.Owner.ProjectionCacheStats.SnapshotBuilds);
+        Assert.Equal(2, scene.Owner.ProjectionCacheStats.SnapshotCacheHits);
+    }
+
+    [Fact]
+    public void Owner_CreateSnapshot_CacheHit_ReturnsFrozenInstance_WithoutAllocation()
+    {
+        CombatResourceTestFixture.SetResources(BuildSkillMap(), new Dictionary<int, NpcDisplayEntry>());
+
+        using var scene = new SceneTestHarness();
+        scene.AppendNickname(100, "Player");
+        AppendHarnessDamage(scene, 100, 200, 11000010, 500, 1_000);
+
+        var first = scene.CreateSnapshot();
+        var warm = scene.Owner.CreateSnapshot();
+        Assert.Same(first, warm);
+        var beforeStats = scene.Owner.ProjectionCacheStats;
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        var beforeBytes = GC.GetAllocatedBytesForCurrentThread();
+        var allCacheHitsReturnedSameInstance = true;
+        for (var i = 0; i < 1_000; i++)
+            allCacheHitsReturnedSameInstance &= ReferenceEquals(first, scene.Owner.CreateSnapshot());
+
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - beforeBytes;
+        var afterStats = scene.Owner.ProjectionCacheStats;
+
+        Assert.True(allCacheHitsReturnedSameInstance);
+        Assert.Equal(0, allocated);
+        Assert.Equal(beforeStats.SnapshotBuilds, afterStats.SnapshotBuilds);
+        Assert.Equal(beforeStats.SnapshotCacheHits + 1_000, afterStats.SnapshotCacheHits);
+    }
+
+    [Fact]
+    public void Owner_CreateSnapshot_ActiveMiss_DoesNotAllocatePerEventPacketDtos()
+    {
+        CombatResourceTestFixture.SetResources(BuildSkillMap(), new Dictionary<int, NpcDisplayEntry>());
+
+        var journal = new ObservedEventJournal();
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var combat = new CombatStore();
+        var owner = new SceneReadModelOwner(journal, Guid.NewGuid(), DateTimeOffset.Now, entities, metadata, combat);
+        entities.ApplyNickname(100, "Player");
+        for (var i = 0; i < 128; i++)
+        {
+            combat.ApplyResolvedCombat(owner.Mechanics, owner.Resources, 100, 200, new CombatWireObservation
+            {
+                SkillCode = 11000010,
+                Damage = 100 + i,
+                HitCount = 1,
+                AttemptCount = 1
+            }, 1_000 + i);
+        }
+
+        owner.Refresh();
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        var beforeBytes = GC.GetAllocatedBytesForCurrentThread();
+        var snapshot = owner.CreateSnapshot();
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - beforeBytes;
+
+        Assert.True(snapshot.Combatants.TryGetValue(100, out var player));
+        Assert.Equal(20_928, player.DamageAmount);
+        Assert.True(allocated < 160_000, $"active miss allocated {allocated:N0} bytes");
+    }
+
+    [Fact]
+    public void Owner_CreateSkillBreakdown_UsesCompactProjectionAllocation()
+    {
+        CombatResourceTestFixture.SetResources(BuildSkillMap(), new Dictionary<int, NpcDisplayEntry>());
+
+        var journal = new ObservedEventJournal();
+        var entities = new EntityStore();
+        var metadata = new SceneBoundaryStore();
+        var combat = new CombatStore();
+        var owner = new SceneReadModelOwner(journal, Guid.NewGuid(), DateTimeOffset.Now, entities, metadata, combat);
+        entities.ApplyNickname(100, "Player");
+        for (var i = 0; i < 128; i++)
+        {
+            combat.ApplyResolvedCombat(owner.Mechanics, owner.Resources, 100, 200, new CombatWireObservation
+            {
+                SkillCode = 11000010,
+                Damage = 100 + i,
+                HitCount = 1,
+                AttemptCount = 1
+            }, 1_000 + i);
+        }
+
+        owner.Refresh();
+        var snapshot = owner.CreateSnapshot();
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        var beforeBytes = GC.GetAllocatedBytesForCurrentThread();
+        var breakdown = owner.CreateSkillBreakdown(snapshot, 100);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - beforeBytes;
+
+        Assert.True(breakdown.Skills.TryGetBySkillCode(11000010, out var skill));
+        Assert.Equal(128, skill.Times);
+        Assert.True(allocated < 40_000, $"skill breakdown allocated {allocated:N0} bytes");
+    }
+
+    [Fact]
+    public void Owner_CreateSnapshot_CachesBossFocusOnlyUntilActivityLeaseExpires()
+    {
+        var sceneStarted = new DateTimeOffset(2026, 6, 12, 12, 0, 0, TimeSpan.Zero);
+        var timeProvider = new MutableSceneTimeProvider(sceneStarted.AddMilliseconds(1_000));
+        var scene = new SceneLiveReadModel(sceneStarted, timeProvider);
+        var sink = SceneSinkFactory.CreateForLive(scene)();
+        var source = SyntheticObservationExtensions.Source(sceneStarted.ToUnixTimeMilliseconds() + 1_000);
+        sink.AppendNpcKind(in source, 200, NpcKind.Boss);
+        sink.SetNpcBattle(in source, 200, true);
+
+        var first = scene.Owner.CreateSnapshot();
+        var second = scene.Owner.CreateSnapshot();
+
+        Assert.Same(first, second);
+        Assert.Single(second.BossFocuses);
+        Assert.False(scene.Owner.HasPendingProjectionChanges);
+
+        timeProvider.SetUtcNow(sceneStarted.AddMilliseconds(11_001));
+        Assert.True(scene.Owner.HasPendingProjectionChanges);
+        var expired = scene.Owner.CreateSnapshot();
+
+        Assert.NotSame(second, expired);
+        Assert.Empty(expired.BossFocuses);
+        Assert.Equal(2, scene.Owner.ProjectionCacheStats.SnapshotBuilds);
+        Assert.Equal(1, scene.Owner.ProjectionCacheStats.SnapshotCacheHits);
+    }
+
+    [Fact]
+    public void Owner_Refresh_AppliesJournalIncrementally()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+        var owner = new SceneReadModelOwner(journal);
+
+        journal.AppendState(
+            sceneId,
+            new TimelineStamp { ObservationOrdinal = 0 },
+            100,
+            0,
+            new StateObservation
+            {
+                EntityId = 100,
+                StateCode = StateCodes.PlayerIdentity,
+                Text = "Perigee"
+            });
+
+        owner.Refresh();
+
+        Assert.Equal(1, owner.AppliedObservationOrdinal);
+        Assert.True(owner.Entities.TryGet(100, out var entity));
+        Assert.Equal("Perigee", entity.Nickname);
+
+        journal.AppendCombat(
+            sceneId,
+            new TimelineStamp { ObservationOrdinal = 1 },
+            100,
+            200,
+            new CombatWireObservation
+            {
+                SkillCode = 11000010,
+                Damage = 500,
+                HitCount = 1,
+                AttemptCount = 1
+            });
+
+        owner.Refresh();
+
+        Assert.Equal(2, owner.AppliedObservationOrdinal);
+        Assert.True(owner.Combat.TryGetPair(100, 200, out var pair));
+        Assert.NotNull(pair);
+        Assert.Equal(500, pair.TotalDamage);
+    }
+
+    [Fact]
+    public void Owner_Refresh_DoesNotFlushPendingCompactAvoidanceBeforeCompletedBatch()
+    {
+        var journal = new ObservedEventJournal();
+        var sceneId = Guid.NewGuid();
+        var owner = new SceneReadModelOwner(journal);
+
+        journal.AppendCombat(
+            sceneId,
+            new TimelineStamp { OffsetTicks = 1_000 * TimeSpan.TicksPerMillisecond, ObservationOrdinal = 0, FlushId = 100 },
+            100,
+            200,
+            new CombatWireObservation
+            {
+                SkillCode = 11000010,
+                BodySkillVariantRaw = 11000010,
+                Damage = 0,
+                HitCount = 0,
+                AttemptCount = 0,
+                Marker = 77,
+                Type = 1,
+                LayoutTag = 0
+            },
+            new RawPacketReference { Opcode = 0x0438 });
+
+        owner.Refresh();
+
+        Assert.Null(CombatPairProjection.GetPair(owner.Combat, owner.Mechanics, owner.Resources, 100, 200));
+
+        journal.CompleteFlush(100);
+        owner.Refresh();
+
+        var pair = CombatPairProjection.GetPair(owner.Combat, owner.Mechanics, owner.Resources, 100, 200);
+        Assert.NotNull(pair);
+        Assert.Equal(0, pair.Value.TotalDamage);
+        Assert.Equal(1, pair.Value.EvadeCount);
+    }
+
+    [Fact]
+    public void Owner_CreateDetailDelta_ReusesWarmSubscriptionForIrrelevantCombat()
+    {
+        CombatResourceTestFixture.SetResources(BuildSkillMap(), new Dictionary<int, NpcDisplayEntry>());
+
+        var scene = new SceneLiveReadModel();
+        var sink = new JournalingRuntimeObservationSink(scene.Journal, scene.Clock, () => scene.SessionId, scene.NextFlushId);
+
+        AppendScenePacket(scene, sink, 100, 200, 11000010, 500, 1_000, 1);
+        AppendScenePacket(scene, sink, 100, 200, 11000010, 300, 2_000, 2);
+        sink.CompleteFlush(1);
+        sink.CompleteFlush(2);
+
+        var firstSnapshot = scene.Owner.CreateSnapshot();
+        var cold = scene.Owner.CreateDetailDelta(firstSnapshot, 100);
+
+        AppendScenePacket(scene, sink, 300, 400, 11000010, 700, 3_000, 3);
+        sink.CompleteFlush(3);
+
+        var secondSnapshot = scene.Owner.CreateSnapshot();
+        var warm = scene.Owner.CreateDetailDelta(secondSnapshot, 100);
+
+        Assert.Same(cold, warm);
+        var expectedRevision =
+            scene.Owner.Combat.GetCombatantDetailRevision(100) +
+            scene.Owner.Mechanics.GetCombatantDetailRevision(100) +
+            scene.Owner.Resources.GetCombatantDetailRevision(100);
+        Assert.Equal(expectedRevision, warm.Revision);
+        Assert.Equal(2, warm.MetricEvents.Count);
+    }
+
+    [Fact]
+    public void Owner_CreateDetailDelta_UpdatesWarmSubscriptionForRelevantCombat()
+    {
+        CombatResourceTestFixture.SetResources(BuildSkillMap(), new Dictionary<int, NpcDisplayEntry>());
+
+        var scene = new SceneLiveReadModel();
+        var sink = new JournalingRuntimeObservationSink(scene.Journal, scene.Clock, () => scene.SessionId, scene.NextFlushId);
+
+        AppendScenePacket(scene, sink, 100, 200, 11000010, 500, 1_000, 1);
+        AppendScenePacket(scene, sink, 100, 200, 11000010, 300, 2_000, 2);
+        sink.CompleteFlush(1);
+        sink.CompleteFlush(2);
+
+        var firstSnapshot = scene.Owner.CreateSnapshot();
+        var cold = scene.Owner.CreateDetailDelta(firstSnapshot, 100);
+
+        AppendScenePacket(scene, sink, 100, 200, 11000010, 200, 3_000, 3);
+        sink.CompleteFlush(3);
+
+        var secondSnapshot = scene.Owner.CreateSnapshot();
+        var warm = scene.Owner.CreateDetailDelta(secondSnapshot, 100);
+
+        Assert.NotSame(cold, warm);
+        var expectedRevision =
+            scene.Owner.Combat.GetCombatantDetailRevision(100) +
+            scene.Owner.Mechanics.GetCombatantDetailRevision(100) +
+            scene.Owner.Resources.GetCombatantDetailRevision(100);
+        Assert.Equal(expectedRevision, warm.Revision);
+        Assert.Equal(3, warm.MetricEvents.Count);
+    }
+
+    [Fact]
+    public void Owner_CreateDetailDelta_UsesSeparateSubscriptionForSelectionSwitch()
+    {
+        CombatResourceTestFixture.SetResources(BuildSkillMap(), new Dictionary<int, NpcDisplayEntry>());
+
+        var scene = new SceneLiveReadModel();
+        var sink = new JournalingRuntimeObservationSink(scene.Journal, scene.Clock, () => scene.SessionId, scene.NextFlushId);
+
+        AppendScenePacket(scene, sink, 100, 200, 11000010, 500, 1_000, 1);
+        AppendScenePacket(scene, sink, 300, 400, 11000010, 700, 2_000, 2);
+        sink.CompleteFlush(1);
+        sink.CompleteFlush(2);
+
+        var snapshot = scene.Owner.CreateSnapshot();
+        var first = scene.Owner.CreateDetailDelta(snapshot, 100);
+        var second = scene.Owner.CreateDetailDelta(snapshot, 300);
+
+        Assert.NotSame(first, second);
+        Assert.Equal(100, first.CombatantId);
+        Assert.Equal(300, second.CombatantId);
+        Assert.Single(first.MetricEvents);
+        Assert.Single(second.MetricEvents);
+    }
+
+    [Fact]
+    public void Owner_CreateDetailDelta_TreatsSummonDamageAsOwnerRelevantOnWarmPoll()
+    {
+        CombatResourceTestFixture.SetResources(BuildSkillMap(), new Dictionary<int, NpcDisplayEntry>());
+
+        var scene = new SceneLiveReadModel();
+        var sink = new JournalingRuntimeObservationSink(scene.Journal, scene.Clock, () => scene.SessionId, scene.NextFlushId);
+
+        sink.AppendNickname(100, "Owner");
+        sink.AppendSummon(100, 500);
+        AppendScenePacket(scene, sink, 500, 200, 11000010, 500, 1_000, 1);
+        AppendScenePacket(scene, sink, 500, 200, 11000010, 300, 2_000, 2);
+        sink.CompleteFlush(1);
+        sink.CompleteFlush(2);
+
+        var firstSnapshot = scene.Owner.CreateSnapshot();
+        var cold = scene.Owner.CreateDetailDelta(firstSnapshot, 100);
+
+        AppendScenePacket(scene, sink, 500, 200, 11000010, 200, 3_000, 3);
+        sink.CompleteFlush(3);
+
+        var secondSnapshot = scene.Owner.CreateSnapshot();
+        var warm = scene.Owner.CreateDetailDelta(secondSnapshot, 100);
+
+        Assert.NotSame(cold, warm);
+        Assert.Equal(3, warm.Revision);
+        Assert.Equal(3, warm.MetricEvents.Count);
+        Assert.All(warm.MetricEvents, e => Assert.Equal(100, e.SourceId));
+    }
+
+    [Fact]
+    public async Task Owner_CreateFrame_KeepsSnapshotDetailAndArchiveOnOneReadModelRevisionUnderConcurrentAppendAndReset()
+    {
+        CombatResourceTestFixture.SetResources(BuildSkillMap(), new Dictionary<int, NpcDisplayEntry>());
+
+        var scene = new SceneLiveReadModel();
+        var sink = SceneSinkFactory.CreateForLive(scene)();
+        sink.AppendNickname(100, "Player");
+        using var writerStop = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var testCancellation = TestContext.Current.CancellationToken;
+        var writer = Task.Run(() =>
+        {
+            var batch = 0L;
+            while (!writerStop.IsCancellationRequested && !testCancellation.IsCancellationRequested)
+            {
+                var currentBatch = Interlocked.Increment(ref batch);
+                var targetId = 200 + (int)(currentBatch % 4);
+                AppendWireDamage(sink, 100, targetId, 11000010, 10, 1_000 + currentBatch * 25, currentBatch);
+                sink.CompleteFlush(currentBatch);
+                if (currentBatch % 37 == 0)
+                    scene.Reset(new DateTimeOffset(2026, 5, 9, 14, 30, (int)(currentBatch % 60), TimeSpan.Zero));
+            }
+        }, testCancellation);
+
+        for (var i = 0; i < 250; i++)
+        {
+            var frame = scene.Owner.CreateFrame(100, forceDetailRefresh: i % 17 == 0);
+            var snapshot = frame.Snapshot;
+            Assert.Equal(snapshot.ReadModelRevision, frame.ReadModelRevision);
+            Assert.Equal(snapshot.BossFocuses.Count, frame.BossFocuses.Count);
+            Assert.True(snapshot.EncounterTime >= 0);
+            Assert.True(snapshot.EncounterEndTime >= snapshot.EncounterStartTime);
+            if (frame.Detail is { } detail)
+            {
+                Assert.Equal(100, detail.CombatantId);
+                Assert.True(detail.Revision <= snapshot.ReadModelRevision);
+                Assert.All(detail.MetricEvents, e => Assert.True(e.SourceId == 100 || e.TargetId == 100));
+                Assert.All(detail.MechanicEvents, e => Assert.True(e.SourceId == 100 || e.TargetId == 100));
+                Assert.All(detail.ResourceEvents, e => Assert.True(e.SourceId == 100 || e.TargetId == 100));
+            }
+
+            if (snapshot.EncounterTime > 0 && snapshot.Combatants.Count > 0)
+            {
+                var archive = scene.Owner.CreateArchivePayload();
+                if (archive.Snapshot.EncounterTime > 0 && archive.Snapshot.Combatants.Count > 0)
+                {
+                    Assert.False(archive.CombatEvents.IsEmpty);
+                    Assert.True(archive.Snapshot.EncounterEndTime >= archive.Snapshot.EncounterStartTime);
+                }
+            }
+
+            await Task.Yield();
+        }
+
+        await writerStop.CancelAsync();
+        await writer.WaitAsync(testCancellation);
+    }
+
+    [Fact]
+    public void LiveReadModel_CapturesFactoryJournal()
+    {
+        var scene = new SceneLiveReadModel();
+        try
+        {
+            var sink = SceneSinkFactory.CreateForLive(scene)();
+            sink.AppendNickname(100, "Perigee");
+            scene.Owner.Refresh();
+            var snapshot = scene.Owner.CreateSnapshot();
+
+            Assert.Equal(1, scene.Journal.Count);
+            Assert.Equal(scene.SessionId, snapshot.EncounterId);
+            Assert.True(scene.Owner.Entities.TryGet(100, out var entity));
+            Assert.Equal("Perigee", entity.Nickname);
+        }
+        finally
+        {
+        }
+    }
+
+    [Fact]
+    public void LiveReadModel_Reset_BarrierSeparatesOldAndNewCombat()
+    {
+        var scene = new SceneLiveReadModel();
+        try
+        {
+            var sink = SceneSinkFactory.CreateForLive(scene)();
+            sink.AppendNickname(100, "Player");
+            AppendWireDamage(sink, 100, 200, 11000010, 500, scene.SessionStarted.ToUnixTimeMilliseconds() + 1_000, 1);
+            AppendWireDamage(sink, 100, 200, 11000010, 300, scene.SessionStarted.ToUnixTimeMilliseconds() + 2_000, 2);
+            sink.CompleteFlush(1);
+            sink.CompleteFlush(2);
+
+            var first = scene.Owner.CreateSnapshot();
+            var oldSessionId = scene.SessionId;
+            var resetStartOrdinal = scene.Clock.NextObservationOrdinal;
+            var nextStarted = new DateTimeOffset(2026, 5, 9, 14, 30, 0, TimeZoneInfo.Local.GetUtcOffset(new DateTime(2026, 5, 9)));
+            scene.Reset(nextStarted);
+            AppendWireDamage(sink, 100, 201, 11000010, 700, scene.SessionStarted.ToUnixTimeMilliseconds() + 3_000, 3);
+            AppendWireDamage(sink, 100, 201, 11000010, 300, scene.SessionStarted.ToUnixTimeMilliseconds() + 4_000, 4);
+            sink.CompleteFlush(3);
+            sink.CompleteFlush(4);
+
+            var second = scene.Owner.CreateSnapshot();
+
+            Assert.NotEqual(oldSessionId, scene.SessionId);
+            Assert.NotEqual(first.EncounterId, second.EncounterId);
+            Assert.Equal(nextStarted, scene.SessionStarted);
+            Assert.Equal(nextStarted, scene.Owner.SceneStarted);
+            Assert.Equal(resetStartOrdinal, scene.Journal.ReadSnapshot(resetStartOrdinal).Stamp.ObservationOrdinal);
+            Assert.Equal(scene.SessionId, scene.Journal.ReadSnapshot(resetStartOrdinal).SceneSessionId);
+            Assert.Equal(1000, second.Combatants[100].DamageAmount);
+            Assert.True(scene.Owner.MetadataRegistry.TryGetPcMetadata(100, out var pc));
+            Assert.Equal("Player", pc.Nickname);
+            Assert.DoesNotContain(200, second.Combatants.Keys);
+        }
+        finally
+        {
+        }
+    }
+
+    [Fact]
+    public void LiveReadModel_Reset_AppliesPendingNpcIdentityBeforeBarrier()
+    {
+        const int npcId = 29194;
+        const int npcCode = 2_980_122;
+        var scene = new SceneLiveReadModel();
+        try
+        {
+            var sink = SceneSinkFactory.CreateForLive(scene)();
+            sink.AppendNpcCode(npcId, npcCode);
+            sink.AppendNpcKind(npcId, NpcKind.Boss);
+            AppendWireDamage(sink, 100, npcId, 11000010, 500, 1_000, 1);
+            sink.CompleteFlush(1);
+
+            scene.Reset(new DateTimeOffset(2026, 5, 30, 19, 35, 44, TimeSpan.Zero));
+
+            Assert.True(scene.Owner.MetadataRegistry.TryGetNpcCode(npcId, out var retainedNpcCode));
+            Assert.Equal(npcCode, retainedNpcCode);
+            Assert.True(scene.Owner.Entities.TryGet(npcId, out var retainedEntity));
+            Assert.Equal(NpcKind.Boss, retainedEntity.Kind);
+
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            sink.SetNpcBattle(npcId, true, now);
+            sink.AppendNpcHp(npcId, 70, 100, now);
+
+            var snapshot = scene.Owner.CreateSnapshot();
+
+            Assert.Empty(snapshot.Combatants);
+            var boss = Assert.Single(snapshot.BossFocuses);
+            Assert.Equal(npcId, boss.InstanceId);
+            Assert.Equal(70, boss.Hp);
+            Assert.Equal(100, boss.MaxHp);
+        }
+        finally
+        {
+        }
+    }
+
+    [Fact]
+    public void LiveReadModel_Reset_RestoresActiveBossFocusAndPreservesNpcCatalogIdentity()
+    {
+        const int bossId = 29194;
+        const int bossCode = 2_980_122;
+        const int monsterId = 29195;
+        const int monsterCode = 2_980_123;
+        var firstStarted = new DateTimeOffset(2026, 6, 12, 12, 0, 0, TimeSpan.Zero);
+        var secondStarted = firstStarted.AddSeconds(10);
+        var timeProvider = new MutableSceneTimeProvider(firstStarted);
+        var scene = new SceneLiveReadModel(firstStarted, timeProvider);
+        try
+        {
+            var sink = SceneSinkFactory.CreateForLive(scene)();
+            var identitySource = SyntheticObservationExtensions.Source(firstStarted.ToUnixTimeMilliseconds() + 10);
+            sink.AppendNpcCode(in identitySource, bossId, bossCode);
+            sink.AppendNpcKind(in identitySource, bossId, NpcKind.Boss);
+            sink.AppendNpcCode(in identitySource, monsterId, monsterCode);
+            sink.AppendNpcKind(in identitySource, monsterId, NpcKind.Monster);
+            sink.SetNpcBattle(bossId, true, firstStarted.ToUnixTimeMilliseconds() + 20);
+            sink.AppendNpcHp(bossId, 100, 100, firstStarted.ToUnixTimeMilliseconds() + 30);
+            _ = scene.Owner.CreateSnapshot();
+
+            scene.Reset(secondStarted);
+
+            sink.AppendNpcHp(bossId, 70, 100, secondStarted.ToUnixTimeMilliseconds() + 100);
+            timeProvider.SetUtcNow(secondStarted.AddMilliseconds(100));
+            var snapshot = scene.Owner.CreateSnapshot();
+
+            var boss = Assert.Single(snapshot.BossFocuses);
+            Assert.Equal(bossId, boss.InstanceId);
+            Assert.Equal(70, boss.Hp);
+            Assert.Equal(100, boss.MaxHp);
+            Assert.True(scene.Owner.Entities.TryGet(bossId, out var retainedBoss));
+            Assert.Equal(bossCode, retainedBoss.NpcCode);
+            Assert.Equal(NpcKind.Boss, retainedBoss.Kind);
+            Assert.True(scene.Owner.Entities.TryGet(monsterId, out var retainedMonster));
+            Assert.Equal(monsterCode, retainedMonster.NpcCode);
+            Assert.Equal(NpcKind.Monster, retainedMonster.Kind);
+            Assert.True(scene.Owner.MetadataRegistry.TryGetNpcCode(bossId, out var retainedBossCode));
+            Assert.Equal(bossCode, retainedBossCode);
+            Assert.True(scene.Owner.MetadataRegistry.TryGetNpcCode(monsterId, out var retainedMonsterCode));
+            Assert.Equal(monsterCode, retainedMonsterCode);
+        }
+        finally
+        {
+        }
+    }
+
+    private sealed class MutableSceneTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        private DateTimeOffset _utcNow = utcNow;
+
+        public override DateTimeOffset GetUtcNow() => _utcNow;
+
+        public void SetUtcNow(DateTimeOffset value) => _utcNow = value;
+    }
+
+    [Fact]
+    public void LiveReadModel_FactoryCreatesSceneSink()
+    {
+        var scene = new SceneLiveReadModel();
+        var factory = SceneSinkFactory.CreateForLive(scene);
+        try
+        {
+            var sink = factory();
+            sink.AppendNickname(100, "Perigee");
+            scene.Owner.Refresh();
+
+            Assert.Equal(1, scene.Journal.Count);
+            Assert.True(scene.Owner.Entities.TryGet(100, out var entity));
+            Assert.Equal("Perigee", entity.Nickname);
+        }
+        finally
+        {
+        }
+    }
+
+    [Fact]
+    public void ReplaySinkHolder_ExposesSceneOwner()
+    {
+        try
+        {
+            using var holder = SceneSinkFactory.CreateForReplay();
+            Assert.NotNull(holder.Journal);
+            Assert.NotNull(holder.Owner);
+            var journal = holder.Journal;
+            var owner = holder.Owner;
+            holder.Sink.AppendNickname(100, "Perigee");
+            owner.Refresh();
+
+            Assert.Equal(1, journal.Count);
+            Assert.True(owner.Entities.TryGet(100, out var entity));
+            Assert.Equal("Perigee", entity.Nickname);
+        }
+        finally
+        {
+        }
+    }
+
+    [Fact]
+    public void ReplaySinkHolder_AttachesInitialMapContextToCurrentOwner()
+    {
+        using var holder = SceneSinkFactory.CreateForReplay();
+        var previousOwner = holder.Owner;
+        holder.Sink.AppendNickname(100, "Old Player");
+
+        var candidate = new PacketObservationSource(1_900, 0, 0x2136, 0, 0, default);
+        holder.Sink.StageMapCandidate(in candidate, 1_001);
+        var boundary = new PacketObservationSource(2_000, 0, 0x2336, 0, 0, default);
+        holder.Sink.ConfirmDestinationMapArrival(in boundary);
+        holder.Sink.AppendNpcCode(101, 2_000_002);
+        holder.Owner.Refresh();
+
+        Assert.Same(previousOwner, holder.Owner);
+        Assert.True(holder.Owner.MetadataRegistry.TryGetPcMetadata(100, out var metadata));
+        Assert.Equal("Old Player", metadata.Nickname);
+        Assert.True(holder.Owner.Entities.TryGet(101, out var entity));
+        Assert.Equal(2_000_002, entity.NpcCode);
+    }
+
+    private static SkillDisplayCatalog BuildSkillMap()
+    {
+        return
+        [
+            new SkillDisplayEntry(11000010, "Strike", SkillCategory.Gladiator, SkillSourceType.PcSkill)
+        ];
+    }
+
+    private static void AppendHarnessDamage(
+        SceneTestHarness scene,
+        int sourceId,
+        int targetId,
+        int skillCode,
+        int damage,
+        long timestamp)
+    {
+        var observation = CreateDamageObservation(skillCode, damage);
+        scene.AppendCombatWireObservation(sourceId, targetId, in observation, timestamp);
+    }
+
+    private static void AppendScenePacket(
+        SceneLiveReadModel scene,
+        JournalingRuntimeObservationSink sink,
+        int sourceId,
+        int targetId,
+        int skillCode,
+        int damage,
+        long timestamp,
+        long flushId)
+    {
+        AppendWireDamage(
+            sink,
+            sourceId,
+            targetId,
+            skillCode,
+            damage,
+            scene.SessionStarted.ToUnixTimeMilliseconds() + timestamp,
+            flushId);
+    }
+
+    private static void AppendWireDamage(
+        IRuntimeObservationSink sink,
+        int sourceId,
+        int targetId,
+        int skillCode,
+        int damage,
+        long timestamp,
+        long flushId)
+    {
+        var observation = CreateDamageObservation(skillCode, damage);
+        var source = new PacketObservationSource(timestamp, flushId, 0, 0, 0, default);
+        sink.AppendCombatWireObservation(in source, sourceId, targetId, in observation);
+    }
+
+    private static CombatWireObservation CreateDamageObservation(int skillCode, int damage) =>
+        new()
+        {
+            SkillCode = skillCode,
+            Damage = damage,
+            HitCount = 1,
+            AttemptCount = 1
+        };
+}
+
+internal static class CurrentContractCombatTestExtensions
+{
+    public static void ApplyResolvedDamage(
+        this CombatStore store,
+        MechanicStore mechanics,
+        ResourceStore resources,
+        int sourceId,
+        int targetId,
+        long damage,
+        int hitCount,
+        int attemptCount,
+        int skillCode)
+    {
+        var observation = new CombatWireObservation
+        {
+            SkillCode = skillCode,
+            Damage = damage,
+            HitCount = hitCount,
+            AttemptCount = attemptCount
+        };
+        var observedAtMilliseconds = Math.Max(store.Revision, Math.Max(mechanics.Revision, resources.Revision)) + 1;
+        store.ApplyResolvedCombat(mechanics, resources, sourceId, targetId, observation, observedAtMilliseconds);
+    }
+
+    public static void ApplyResolvedCombat(
+        this CombatStore store,
+        MechanicStore mechanics,
+        ResourceStore resources,
+        int sourceId,
+        int targetId,
+        CombatWireObservation observation,
+        long observedAtMilliseconds,
+        CombatPacketRule packetRule = CombatPacketRule.None)
+    {
+        var occurrence = new CombatOccurrenceResolution(
+            packetRule,
+            CombatMaterializationKind.Primary,
+            CombatAssociationKind.None,
+            CombatSuppressionReason.None);
+        var materialization = CombatOccurrenceMaterializer.Resolve(sourceId, targetId, in observation, in occurrence);
+        if (!materialization.HasAny)
+            throw new InvalidOperationException("The raw combat facts did not materialize a current-contract occurrence.");
+
+        if (materialization.Contribution is { } contribution)
+            store.ApplyCombat(sourceId, targetId, in observation, in contribution, observedAtMilliseconds);
+        if (materialization.Mechanic is { } mechanic)
+            mechanics.Apply(sourceId, targetId, in observation, in mechanic, observedAtMilliseconds, CombatStore.UnknownSourceObservationOrdinal, default);
+        if (materialization.Resource is { } resource)
+            resources.Apply(sourceId, targetId, in observation, in resource, observedAtMilliseconds, CombatStore.UnknownSourceObservationOrdinal, default);
+    }
+}

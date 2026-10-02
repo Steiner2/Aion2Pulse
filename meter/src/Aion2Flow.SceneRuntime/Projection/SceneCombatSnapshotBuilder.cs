@@ -1,0 +1,171 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using Cloris.Aion2Flow.SceneRuntime.Combat;
+using Cloris.Aion2Flow.SceneRuntime.Model;
+
+namespace Cloris.Aion2Flow.SceneRuntime.Projection;
+
+internal sealed class SceneCombatSnapshotBuilder
+{
+    private readonly Dictionary<int, SceneCombatantMetricsAccumulator> _combatants = [];
+    private readonly List<SceneBossFocusSnapshot> _bossFocuses = [];
+    private readonly List<int> _bossNpcCodes = [];
+
+    public Guid EncounterId { get; private set; }
+
+    public SceneKind Kind { get; private set; }
+
+    public long SceneTransitionRevision { get; private set; }
+
+    public uint MapId { get; private set; }
+
+    public uint MapInstanceId { get; private set; }
+
+    public long EncounterStartTime { get; private set; }
+
+    public long EncounterEndTime { get; private set; }
+
+    public long EncounterTime { get; private set; }
+
+    public NpcRuntimeObservationSnapshot? TargetObservation { get; private set; }
+
+    public EncounterSummarySnapshot Encounter { get; private set; } = EncounterSummarySnapshot.Empty;
+
+    public int CombatantCount => _combatants.Count;
+
+    public Dictionary<int, SceneCombatantMetricsAccumulator>.KeyCollection CombatantIds => _combatants.Keys;
+
+    public void Reset(Guid encounterId, SceneKind kind, int combatantCapacity, int bossFocusCapacity)
+    {
+        _combatants.Clear();
+        _bossFocuses.Clear();
+        _bossNpcCodes.Clear();
+        _combatants.EnsureCapacity(Math.Max(0, combatantCapacity));
+        _bossFocuses.EnsureCapacity(Math.Max(0, bossFocusCapacity));
+
+        EncounterId = encounterId == default ? Guid.NewGuid() : encounterId;
+        Kind = kind;
+        SceneTransitionRevision = 0;
+        MapId = 0;
+        MapInstanceId = 0;
+        EncounterStartTime = 0;
+        EncounterEndTime = 0;
+        EncounterTime = 0;
+        TargetObservation = null;
+        Encounter = EncounterSummarySnapshot.Empty;
+    }
+
+    public void SetMap(uint mapId, uint mapInstanceId, long sceneTransitionRevision)
+    {
+        MapId = mapId;
+        MapInstanceId = mapInstanceId;
+        SceneTransitionRevision = sceneTransitionRevision;
+    }
+
+    public void SetTarget(NpcRuntimeObservationSnapshot? targetObservation)
+    {
+        TargetObservation = targetObservation;
+    }
+
+    public void SetEncounterWindow(long start, long end, long time)
+    {
+        EncounterStartTime = start;
+        EncounterEndTime = end;
+        EncounterTime = time;
+    }
+
+    public void SetEncounter(EncounterSummarySnapshot encounter)
+    {
+        Encounter = encounter;
+    }
+
+    public void AddBossFocus(SceneBossFocusSnapshot focus)
+    {
+        _bossFocuses.Add(focus);
+    }
+
+    public void AddBossNpcCode(int npcCode)
+    {
+        if (npcCode > 0 && !_bossNpcCodes.Contains(npcCode))
+            _bossNpcCodes.Add(npcCode);
+    }
+
+    public ref SceneCombatantMetricsAccumulator GetOrAddCombatant(int combatantId)
+    {
+        ref var metrics = ref CollectionsMarshal.GetValueRefOrAddDefault(_combatants, combatantId, out var exists);
+        if (!exists)
+        {
+            metrics = default;
+        }
+
+        return ref metrics;
+    }
+
+    public ref SceneCombatantMetricsAccumulator GetExistingCombatant(int combatantId)
+    {
+        ref var metrics = ref CollectionsMarshal.GetValueRefOrNullRef(_combatants, combatantId);
+        if (Unsafe.IsNullRef(ref metrics))
+        {
+            throw new KeyNotFoundException($"The combatant id '{combatantId}' was not found in the snapshot builder.");
+        }
+
+        return ref metrics;
+    }
+
+    public SceneCombatSnapshot ToSnapshot(long readModelRevision)
+    {
+        if (_combatants.Count == 0 &&
+            _bossFocuses.Count == 0 &&
+            _bossNpcCodes.Count == 0 &&
+            readModelRevision == 0 &&
+            SceneTransitionRevision == 0 &&
+            MapId == 0 &&
+            MapInstanceId == 0 &&
+            EncounterStartTime == 0 &&
+            EncounterEndTime == 0 &&
+            EncounterTime == 0 &&
+            TargetObservation is null &&
+            Encounter.Equals(EncounterSummarySnapshot.Empty) &&
+            EncounterId == Guid.Empty)
+        {
+            return SceneCombatSnapshot.Empty;
+        }
+
+        var entries = _combatants.Count == 0
+            ? []
+            : new CombatantSnapshotEntry[_combatants.Count];
+        if (entries.Length > 0)
+        {
+            var index = 0;
+            foreach (var (combatantId, accumulator) in _combatants)
+            {
+                entries[index++] = new CombatantSnapshotEntry(combatantId, accumulator.ToSnapshot());
+            }
+
+            Array.Sort(entries, static (left, right) => left.Id.CompareTo(right.Id));
+        }
+
+        var bossFocuses = _bossFocuses.Count == 0
+            ? []
+            : _bossFocuses.ToArray();
+        var bossNpcCodes = _bossNpcCodes.Count == 0
+            ? []
+            : _bossNpcCodes.ToArray();
+
+        return new SceneCombatSnapshot(
+            EncounterId,
+            Kind,
+            readModelRevision,
+            SceneTransitionRevision,
+            MapId,
+            MapInstanceId,
+            EncounterStartTime,
+            EncounterEndTime,
+            EncounterTime,
+            entries,
+            TargetObservation,
+            Encounter,
+            bossFocuses,
+            bossNpcCodes);
+    }
+}
