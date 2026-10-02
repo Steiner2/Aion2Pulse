@@ -2,7 +2,7 @@ param(
     [switch]$Test,
     [switch]$Publish,
     [switch]$Offline,
-    [string]$PublishFolder = 'artifacts\Aion2Pulse-0.3.2'
+    [string]$PublishFolder = 'artifacts\Aion2Pulse-0.3.3'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
@@ -33,6 +33,12 @@ try {
             Copy-Item -LiteralPath 'config\default-settings.json' -Destination $defaultSettingsPath
         }
         Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md') -Destination (Join-Path $publishDirectory 'START-HERE.md')
+        $packageReadme = Join-Path $publishDirectory 'START-HERE.md'
+        $readmeText = [IO.File]::ReadAllText($packageReadme).Replace('meter/UPSTREAM.md', 'UPSTREAM.md')
+        [IO.File]::WriteAllText($packageReadme, $readmeText, [Text.UTF8Encoding]::new($false))
+        $packageDocs = Join-Path $publishDirectory 'docs'
+        New-Item -ItemType Directory -Path $packageDocs -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/assets') -Destination $packageDocs -Recurse -Force
         $manifest = Get-ChildItem -LiteralPath $publishDirectory -File | ForEach-Object {
             [pscustomobject]@{ Name = $_.Name; Length = $_.Length; SHA256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
         }

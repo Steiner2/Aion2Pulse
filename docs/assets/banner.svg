@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 280" role="img" aria-labelledby="title desc">
+  <title id="title">Aion2Pulse — Damage and healing. One clear view.</title>
+  <desc id="desc">Aion2Pulse branding with a mint pulse mark and dark teal background.</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="0.6"><stop stop-color="#10161e"/><stop offset="1" stop-color="#16323b"/></linearGradient>
+    <linearGradient id="mark" x2="1" y2="1"><stop stop-color="#a0f4dc"/><stop offset="1" stop-color="#42cccf"/></linearGradient>
+  </defs>
+  <rect width="1200" height="280" fill="url(#bg)"/>
+  <path d="M794 0V280M854 0V280M914 0V280M974 0V280M1034 0V280M1094 0V280M1154 0V280M760 40H1200M760 100H1200M760 160H1200M760 220H1200" stroke="#4fcac4" stroke-opacity="0.055"/>
+  <rect x="54" y="67" width="144" height="144" rx="32" fill="#203740"/>
+  <path d="M78 150H94L110 101L131 181L150 130H172" fill="none" stroke="url(#mark)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="238" y="122" fill="#edf4f7" font-family="Segoe UI,Arial,sans-serif" font-size="54" font-weight="600">Aion2<tspan fill="#72e1ce">Pulse</tspan></text>
+  <text x="240" y="169" fill="#c3d4dc" font-family="Segoe UI,Arial,sans-serif" font-size="23">Damage &amp; healing. One clear view.</text>
+  <text x="240" y="207" fill="#83a5b3" font-family="Segoe UI,Arial,sans-serif" font-size="15" letter-spacing="2">ENCOUNTER METER FOR AION 2</text>
+  <path d="M810 163H849L881 89L928 218L969 128H1160" fill="none" stroke="#72e1ce" stroke-width="5" stroke-opacity="0.7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,90 +1,109 @@
-# Aion2Pulse
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="Aion2Pulse — Damage and healing. One clear view." width="100%">
+</p>
 
-A DPS and healing meter for AION 2 with automatic encounter tracking,
-customizable overlays and combat history. Combat values come from passive
-network packet analysis using WinDivert.
+<p align="center">
+  <strong>A DPS and healing meter for AION 2.</strong><br>
+  Automatic encounters, compact overlays and the details behind every fight.
+</p>
 
-## Features
+<p align="center">
+  <a href="https://github.com/Steiner2/Aion2Pulse/releases/latest"><strong>Download for Windows</strong></a>
+  &nbsp; · &nbsp;
+  <a href="https://github.com/Steiner2/Aion2Pulse/issues">Report an issue</a>
+  &nbsp; · &nbsp;
+  <a href="#build-from-source">Build from source</a>
+</p>
 
-- Damage, DPS, healing and HPS, including a combined four-column view.
-- Automatic encounters for mob packs and bosses. Finished results stay frozen
-  between fights; the next pull starts a new encounter.
-- Paused combat-rate time during long gaps without group damage.
-- Three overlay designs: Raid Classic, Focus Glass and Combat Studio.
-- Compact title bar, class colors, transparent backgrounds and interface scaling.
-- A separate settings window and configurable hotkeys.
-- Searchable combat history with split, list and card layouts.
-- Player and skill breakdowns with original skill icons.
-- Overall totals for the current map visit, excluding travel and waiting time.
-- Connection latency from protocol samples, with a passive TCP estimate fallback.
+<p align="center">Windows x64 &nbsp; · &nbsp; .NET 10 &nbsp; · &nbsp; GPL-3.0</p>
 
-DPS is the default view. Use the title-bar mode button to cycle through DPS, HPS
-and both, or enable **Show DPS and HPS together** under **Settings → Overlay**.
-The selected view persists between starts.
+<p align="center">
+  <img src="docs/assets/pulse-combined-RaidClassic.png" alt="Aion2Pulse showing damage, DPS, healing and HPS with synthetic test data" width="760">
+  <br><sub>Actual application UI. All screenshots use synthetic players and combat data.</sub>
+</p>
 
-## Requirements and setup
+## Every fight, clearly
 
-- Windows x64.
-- Administrator privileges for the WinDivert capture driver.
+| Damage and healing | Encounters that stay readable | Details when you need them |
+| --- | --- | --- |
+| Switch between DPS, HPS or both. Total damage and healing remain visible beside their rates. | Finished results stay frozen. New pulls start fresh, while known boss intermissions stay in one encounter. | Explore player totals, original skill icons, saved fights and overall totals for the current map visit. |
 
-Download the Windows ZIP from [Releases](https://github.com/Steiner2/Aion2Pulse/releases/latest).
-Extract the complete package and launch **Aion2Pulse.exe** as
-administrator. The package includes the .NET runtime; Npcap is not required.
-Start the meter before entering the game. If the character is not recognized,
-return to character selection and enter again.
+## Choose your overlay
 
-## Combat history
+| Raid Classic | Focus Glass | Combat Studio |
+| :---: | :---: | :---: |
+| ![Raid Classic with synthetic data](docs/assets/pulse-RaidClassic.png) | ![Focus Glass with synthetic data](docs/assets/pulse-FocusGlass.png) | ![Combat Studio with synthetic data](docs/assets/pulse-CombatStudio.png) |
+| Familiar class bars. | A compact, open layout. | A wider view with room for detail. |
 
-The last 50 encounters are saved in the `history/` folder next to the application,
-including player totals and skill breakdowns. Keep this folder when updating.
-Overall totals cover the current map visit and reset on a detected map change
-or application restart. **New total** starts a fresh total manually.
+All three designs support interface scaling, class colors, adjustable transparency
+and the combined damage/DPS/healing/HPS view. **DPS remains the default.**
 
-Both DPS and HPS use shared encounter duration. Healing is the amount reported
-by captured packets; it does not represent verified effective healing or overheal.
-Unknown or expired latency measurements show **— ms**. A TCP-derived latency
-value is identified in the tooltip.
+## A history worth keeping
 
-By default, rate time follows positive group damage events. Short intervals
-between hits count toward that time; gaps longer than three seconds do not.
-The display stays stable while no further damage arrives, and boss intermissions
-remain part of the same encounter. Actual event timestamps remain intact for
-history and skill details. This is an activity heuristic, not verified detection
-of cutscenes or invulnerability; voluntary inactivity or unusually slow attacks
-can also be excluded. Adjust the threshold or disable **Exclude long damage
-pauses from DPS / HPS time** under **Settings → Combat** to use elapsed combat time.
-Changing this option starts a fresh encounter so the two timing methods are not
-mixed within one result.
+![Combat history populated with synthetic encounters](docs/assets/pulse-history-SplitView.png)
 
-Latency display refreshes every five seconds. Capture connection indicators
-continue updating independently, and disconnects immediately clear the latency.
+Search the last 50 fights, filter bosses or incomplete encounters, and select a
+player for skill details. Choose a split view, compact list or card layout.
+Overall totals cover the current map visit and exclude travel and waiting time.
+
+<details>
+<summary><strong>See the settings window</strong></summary>
+
+![Aion2Pulse settings](docs/assets/pulse-settings.png)
+
+Appearance, overlay behavior, combat timing and history options are organized in
+a separate window. Changes are saved automatically.
+
+</details>
+
+## Get started
+
+1. Download **Aion2Pulse-win-x64.zip** from [Releases](https://github.com/Steiner2/Aion2Pulse/releases/latest).
+2. Extract the complete archive and launch **Aion2Pulse.exe** as administrator.
+3. Start the meter before entering the game. If your character is not recognized,
+   return to character selection and enter again.
+
+The Windows package includes the .NET runtime and WinDivert. Npcap is not required.
+Keep the `history/` folder next to the application when updating.
+
+## Combat timing
+
+By default, rate time follows positive group damage. Short intervals between hits
+count; gaps longer than three seconds do not. This keeps rates stable during long
+damage pauses while preserving the original timestamps for history and details.
+
+Pause exclusion is an activity heuristic, not verified detection of cutscenes or
+invulnerability. Deliberate inactivity and slow attacks can also be excluded.
+Adjust the threshold or disable it under **Settings → Combat**. Changing the
+timing option starts a fresh encounter.
+
+Healing represents packet-reported amounts, not verified effective healing or
+overheal. Latency refreshes every five seconds; the tooltip identifies a passive
+TCP estimate and unknown values show **— ms**.
 
 ## Build from source
 
-Install the .NET 10 SDK on Windows, then run:
+Install the .NET 10 SDK on Windows:
 
 ```powershell
 ./build.ps1 -Test -Publish
 ```
 
-Source and tests are in `meter/`. The build produces a self-contained Windows
-package under `artifacts/` with Native AOT disabled. The included regression
-suite uses synthetic inputs; raw gameplay captures are not distributed.
+Source and synthetic regression tests are in `meter/`. Packages are generated
+under `artifacts/`. Raw gameplay captures are not distributed.
 
 ## Development status
 
 Global support is under active development. Party/force tracking, boss phases,
 same-target re-pulls, healing and latency still require further live validation
-against the current client. Automatic encounter completion uses an inactivity
-fallback when reliable combat status signals are unavailable.
+against the current client.
 
 ## License and credits
 
 Aion2Pulse is distributed under [GPL-3.0](LICENSE.txt) and is based on
 [Aion2Flow](https://github.com/cloris-chan/Aion2Flow) by Cloris and contributors.
-The imported revision and retained notices are documented in
-[source provenance](meter/UPSTREAM.md).
+See [source provenance](meter/UPSTREAM.md) for the imported revision.
 
 Original game icons and their catalog come from the Aion2Flow foundation.
 Game asset rights remain with their respective owners and are independent of
-this project's source-code license.
+the source-code license.

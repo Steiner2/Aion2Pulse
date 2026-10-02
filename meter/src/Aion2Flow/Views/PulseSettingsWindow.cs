@@ -64,7 +64,7 @@ public sealed class PulseSettingsWindow : Window
         tabs.Items.Add(Page("Capture", "Passive network packet recording.", Text("Global Early Access · network only"),
             Text("Capture starts with the meter. Driver, game port and connection status remain visible in the footer."),
             Text("Healing shows amounts reported by the packets. Shield absorption is kept separate in player details.")));
-        tabs.Items.Add(Page("About", "Aion2Pulse", Text("Version 0.3.2"), Text("Based on the Aion2Flow packet engine. GPL-3.0 license and upstream credits are included in the package.")));
+        tabs.Items.Add(Page("About", "Aion2Pulse", Text("Version 0.3.3"), Text("Based on the Aion2Flow packet engine. GPL-3.0 license and upstream credits are included in the package.")));
         var done = new Button { Content = "Done", HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(22, 7) };
         done.Click += (_, _) => Close();
         var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(20, 10) };

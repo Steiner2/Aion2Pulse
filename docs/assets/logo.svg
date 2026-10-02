@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Aion2Pulse</title>
+  <desc id="desc">A mint pulse waveform on a rounded dark square.</desc>
+  <defs>
+    <linearGradient id="surface" x2="1" y2="1"><stop stop-color="#1b303b"/><stop offset="1" stop-color="#10161e"/></linearGradient>
+    <linearGradient id="signal" x2="1" y2="1"><stop stop-color="#a0f4dc"/><stop offset="1" stop-color="#42cccf"/></linearGradient>
+  </defs>
+  <rect x="2" y="2" width="124" height="124" rx="28" fill="url(#surface)"/>
+  <path d="M21 73H34L49 29L67 100L84 55H108" fill="none" stroke="url(#signal)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
