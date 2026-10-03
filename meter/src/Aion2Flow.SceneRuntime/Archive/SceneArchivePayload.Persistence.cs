@@ -12,6 +12,7 @@ public sealed partial class SceneArchivePayload
     internal StoredEncounter ToStored(ArchivedEncounterRecord record) => new()
     {
         Id = record.Id, ArchivedAt = record.ArchivedAt, Trigger = record.Trigger,
+        Support = SupportData,
         IsAutomatic = record.IsAutomatic, EncounterId = Snapshot.EncounterId,
         Kind = Kind, SceneStarted = SceneStarted, MapId = Snapshot.MapId,
         MapInstanceId = Snapshot.MapInstanceId, Start = Snapshot.EncounterStartTime,
@@ -28,7 +29,8 @@ public sealed partial class SceneArchivePayload
 
     internal static SceneArchivePayload FromStored(StoredEncounter data)
     {
-        if (data.Version != 1 || data.Id == Guid.Empty || data.EncounterId == Guid.Empty || data.Duration <= 0 || data.End < data.Start ||
+        var support = data.Version == 1 ? new EncounterSupportData() : data.Support;
+        if (data.Version is not 1 and not 2 || support is null || support.Events is null || support.Auras is null || data.Id == Guid.Empty || data.EncounterId == Guid.Empty || data.Duration <= 0 || data.End < data.Start ||
             data.Metrics is null || data.Metrics.Length == 0 || data.Players is null || data.Npcs is null || data.Maps is null ||
             data.BossFocuses is null || data.BossNpcCodes is null || data.Pairs is null || data.Combatants is null ||
             data.Entities is null || data.Vitals is null || data.Bosses is null || data.Details is null ||
@@ -47,6 +49,7 @@ public sealed partial class SceneArchivePayload
             data.Pairs, data.Combatants, data.Entities, data.Vitals, data.Bosses, data.BossNpcCodes,
             ArchivePayloadIndex.Create([], [], [], [], [], [], data.Pairs, data.Combatants));
         payload._storedDetails = data.Details;
+        payload._supportData = support;
         return payload;
     }
 }

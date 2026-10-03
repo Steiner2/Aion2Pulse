@@ -6,12 +6,14 @@ public enum PullSegmentState { Waiting, Recording, Frozen }
 public sealed class PullSegmentTracker
 {
     private readonly Dictionary<int, EnemyState> _enemies = [];
+    private readonly HashSet<int> _bossEnemies = [];
     public PullSegmentState State { get; private set; }
     public long StartedAt { get; private set; }
     public long LastActivityAt { get; private set; }
     public long EndedAt { get; private set; }
     public string CompletionReason { get; private set; } = "waiting";
     public long IdleTimeoutMilliseconds { get; set; } = 5_000;
+    public bool MergeAdjacentPulls { get; set; }
     public bool HasBoss { get; private set; }
     public bool HasTrainingDummy { get; private set; }
 
@@ -30,6 +32,7 @@ public sealed class PullSegmentTracker
         if (State != PullSegmentState.Recording)
         {
             _enemies.Clear();
+            _bossEnemies.Clear();
             StartedAt = at;
             LastActivityAt = at;
             EndedAt = 0;
@@ -40,6 +43,7 @@ public sealed class PullSegmentTracker
         }
         LastActivityAt = Math.Max(LastActivityAt, at);
         HasBoss |= boss;
+        if (boss) _bossEnemies.Add(enemyId);
         HasTrainingDummy |= trainingDummy;
         var active = _enemies.TryGetValue(enemyId, out var previous) && previous.Active == true ? true : (bool?)null;
         _enemies[enemyId] = new EnemyState(at, active, previous.ObservedAt);
@@ -72,13 +76,20 @@ public sealed class PullSegmentTracker
             allInactive &= enemy.Active == false;
             latestStateAt = Math.Max(latestStateAt, enemy.ObservedAt);
         }
+        // A chain ends with all known bosses inactive, even if old trash never sent an end signal.
+        if (MergeAdjacentPulls && HasBoss && _bossEnemies.All(id => _enemies[id].Active == false))
+        {
+            var bossEnd = _bossEnemies.Max(id => _enemies[id].ObservedAt);
+            if (now - Math.Max(LastActivityAt, bossEnd) >= 1_000)
+                return Freeze(Math.Max(LastActivityAt, bossEnd), "bosses-inactive");
+        }
         // Allow late packets and staggered death/state messages to settle first.
-        if (allInactive && now - latestStateAt >= 1_000)
+        if (allInactive && (!MergeAdjacentPulls || HasBoss) && now - latestStateAt >= 1_000)
             return Freeze(latestStateAt, "enemies-inactive");
         // Without an explicit end, boss intermissions are not split by an idle timer.
         if (HasBoss)
             return false;
-        var timeout = HasTrainingDummy ? 10_000 : Math.Clamp(IdleTimeoutMilliseconds, 2_000, 30_000);
+        var timeout = HasTrainingDummy && !MergeAdjacentPulls ? 10_000 : Math.Clamp(IdleTimeoutMilliseconds, 2_000, MergeAdjacentPulls ? 180_000 : 30_000);
         // Active flags can remain set after despawn. Actual damage controls trash
         // inactivity; known bosses already have separate intermission protection.
         return now - LastActivityAt >= timeout && Freeze(LastActivityAt, "idle-heuristic");
@@ -97,6 +108,7 @@ public sealed class PullSegmentTracker
     public void Reset()
     {
         _enemies.Clear();
+        _bossEnemies.Clear();
         State = PullSegmentState.Waiting;
         StartedAt = LastActivityAt = EndedAt = 0;
         HasBoss = HasTrainingDummy = false;

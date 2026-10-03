@@ -63,7 +63,7 @@ public sealed class PullOverlayLayoutTests
             var previewSkills = resources.Skills.Where(skill => resources.IsPlayerProfessionSkill(skill.SkillId) && resources.ResolveSkillIconAssetName(skill.SkillId) is not null).Select(skill => skill.SkillId).Take(12).ToArray();
             Assert.NotEmpty(previewSkills);
             var sink = SceneSinkFactory.CreateForLive(scene)();
-            var started = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+            var started = DateTimeOffset.Now.AddSeconds(-20).ToUnixTimeMilliseconds();
             PacketObservationSource Source(int offset) => new(started + offset, offset + 1, 0x0438, 30, offset, default);
             sink.SetCurrentMap(Source(0), 910035);
             var classes = new[] { CharacterClass.Gladiator, CharacterClass.Sorcerer, CharacterClass.Ranger, CharacterClass.Cleric };
@@ -82,6 +82,8 @@ public sealed class PullOverlayLayoutTests
                     var wire = new CombatWireObservation { SkillCode = previewSkills[(offset / 1000 + i) % previewSkills.Length], Damage = 10_000 - i * 1_800, HitCount = 1, AttemptCount = 1 };
                     sink.AppendCombatWireObservation(Source(offset), 100 + i, 200, in wire);
                 }
+                sink.AppendNpcHp(Source(offset), 200, 1_000_000 - offset * 50, 1_000_000);
+                sink.RegisterCooldown4738(Source(offset), previewSkills[0], Math.Max(0, 10_000 - offset));
                 sink.CompleteFlush(offset + 1);
             }
             vm.RefreshCombatStatsForTesting();
@@ -113,7 +115,7 @@ public sealed class PullOverlayLayoutTests
                 bitmap.Save(previewPath, PngBitmapEncoderOptions.Default);
             }
             var heal = new CombatWireObservation { SkillCode = 14_000_010, Damage = 60_000, ResourceKind = CombatResourceKind.Health, HitCount = 1, AttemptCount = 1 };
-            sink.AppendCombatWireObservation(Source(13_000), 103, 100, in heal);
+            sink.AppendCombatWireObservation(Source(12_000), 103, 100, in heal);
             sink.CompleteFlush(13_001);
             vm.SettingsFlyout.CombatantSortMetric = CombatantSortMetric.HealingPerSecond;
             vm.RefreshCombatStatsForTesting(); frameBatch.FlushFrame();
@@ -131,6 +133,15 @@ public sealed class PullOverlayLayoutTests
             designPicker.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(MeterDesign.FocusGlass, vm.SettingsFlyout.MeterDesign);
+            var sliders = settingsContent.GetLogicalDescendants().OfType<Slider>().ToArray();
+            Assert.Equal(3, sliders.Length);
+            sliders[0].Value = 28; Dispatcher.UIThread.RunJobs();
+            Assert.Equal(28, vm.SettingsFlyout.PlayerRowHeight);
+            sliders[1].Value = 70; Dispatcher.UIThread.RunJobs();
+            Assert.Equal(70, vm.SettingsFlyout.SurfaceIntensity);
+            sliders[2].Value = 110; Dispatcher.UIThread.RunJobs();
+            Assert.Equal(110, vm.SettingsFlyout.UiScalePercent);
+            sliders[0].Value = 32; sliders[1].Value = 85; sliders[2].Value = 100; Dispatcher.UIThread.RunJobs();
             var historyPicker = settingsContent.GetLogicalDescendants().OfType<ComboBox>().Single();
             Assert.Equal(HistoryLayout.SplitView, historyPicker.SelectedItem);
             historyPicker.SelectedItem = HistoryLayout.Cards; Dispatcher.UIThread.RunJobs();
@@ -198,12 +209,33 @@ public sealed class PullOverlayLayoutTests
             Assert.InRange(divider.TranslatePoint(default, historyContent)!.Value.X, 210, 320);
             var playerButton = historyContent.GetVisualDescendants().OfType<Button>().First(button => button.Content is Grid grid && grid.Children.OfType<Cloris.Aion2Flow.Controls.PcDisplay>().Any());
             playerButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Dispatcher.UIThread.RunJobs();
-            var detailTabs = historyContent.GetVisualDescendants().OfType<TabControl>().Single();
+            var detailTabs = historyContent.GetVisualDescendants().OfType<TabControl>().Single(t => t.Name == "EncounterDetailTabs");
             detailTabs.SelectedIndex = 1;
             historyContent.Measure(new Size(1050, 660)); historyContent.Arrange(new Rect(0, 0, 1050, 660)); Dispatcher.UIThread.RunJobs();
             Assert.Single(historyContent.GetVisualDescendants().OfType<SkillEventTimelineView>());
-            Assert.NotEmpty(historyContent.GetVisualDescendants().OfType<ListBox>().Single().Items);
+            Assert.NotEmpty(historyContent.GetVisualDescendants().OfType<ListBox>().First().Items);
             SavePreview(historyContent, "pulse-history-Timeline.png");
+            detailTabs.SelectedIndex = 2; Dispatcher.UIThread.RunJobs();
+            historyContent.Measure(new Size(1050, 660)); historyContent.Arrange(new Rect(0, 0, 1050, 660)); Dispatcher.UIThread.RunJobs();
+            var analysisTabs = historyContent.GetVisualDescendants().OfType<TabControl>().Single(t => t.Name == "AnalysisTabs");
+            foreach (var index in Enumerable.Range(0, analysisTabs.Items.Count))
+            {
+                analysisTabs.SelectedIndex = index;
+                historyContent.Measure(new Size(1050, 660)); historyContent.Arrange(new Rect(0, 0, 1050, 660)); Dispatcher.UIThread.RunJobs();
+                SavePreview(historyContent, $"pulse-analysis-{index}.png");
+            }
+            var combatCategory = settingsContent.GetLogicalDescendants().OfType<Button>().Single(b => Equals(b.Content, "Combat"));
+            combatCategory.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Dispatcher.UIThread.RunJobs();
+            var trackingPicker = settingsContent.GetLogicalDescendants().OfType<ComboBox>().Single(c => c.ItemsSource?.GetType() == typeof(CombatTrackingBehavior[]));
+            trackingPicker.SelectedItem = CombatTrackingBehavior.Manual; Dispatcher.UIThread.RunJobs();
+            Assert.False(vm.SettingsFlyout.EffectiveAutoSegment);
+            trackingPicker.SelectedItem = CombatTrackingBehavior.CombatChain; Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.SettingsFlyout.EffectiveAutoSegment);
+            Assert.Equal(30, vm.SettingsFlyout.EffectiveIdleSeconds);
+            settingsContent.Measure(new Size(760, 600)); settingsContent.Arrange(new Rect(0, 0, 760, 600)); Dispatcher.UIThread.RunJobs();
+            SavePreview(settingsContent, "pulse-settings-Combat.png");
+            trackingPicker.SelectedItem = CombatTrackingBehavior.SeparatePulls; Dispatcher.UIThread.RunJobs();
+            Assert.Equal(5, vm.SettingsFlyout.EffectiveIdleSeconds);
             historyWindow.Width = 800; Dispatcher.UIThread.RunJobs();
             Assert.False(divider.IsVisible);
             vm.SettingsFlyout.ShowBothMetrics = false;
@@ -222,6 +254,10 @@ public sealed class PullOverlayLayoutTests
     {
         var previewPath = Environment.GetEnvironmentVariable("AION2_PREVIEW_PATH");
         if (string.IsNullOrWhiteSpace(previewPath)) return;
+        foreach (var visual in content.GetVisualDescendants().OfType<Control>()) { visual.InvalidateMeasure(); visual.InvalidateVisual(); }
+        content.InvalidateMeasure(); content.InvalidateVisual();
+        content.Measure(content.Bounds.Size); content.Arrange(new Rect(new Point(), content.Bounds.Size));
+        Dispatcher.UIThread.RunJobs();
         using var bitmap = new RenderTargetBitmap(new PixelSize((int)content.Bounds.Width * 2, (int)content.Bounds.Height * 2), new Vector(192, 192));
         bitmap.Render(content); bitmap.Save(Path.Combine(Path.GetDirectoryName(previewPath)!, name), PngBitmapEncoderOptions.Default);
     }

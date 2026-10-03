@@ -9,6 +9,48 @@ namespace Cloris.Aion2Flow.Tests.SceneRuntime;
 public sealed class PullSegmentationTests
 {
     [Fact]
+    public void CombatChainMergesDeadMobsUntilConfiguredBreak()
+    {
+        var f = new Fixture(); f.Scene.ConfigureAutoSegmentation(true, 30, true);
+        f.Damage(100, 200, 100, 1000);
+        var id = f.Scene.SessionId;
+        f.Sink.AppendNpcHp(f.Source(1100), 200, 0); f.Sink.CompleteFlush(1101);
+        f.At(5000); f.Scene.CreateFrame(); Assert.Equal(PullSegmentState.Recording, f.Scene.PullState);
+        f.Damage(100, 201, 200, 9000);
+        Assert.Equal(id, f.Scene.SessionId);
+        Assert.Equal(300, f.Scene.CreateFrame().Snapshot.Combatants[100].DamageAmount);
+        f.At(39001); f.Scene.CreateFrame();
+        Assert.Equal(PullSegmentState.Frozen, f.Scene.PullState);
+        f.Damage(100, 202, 400, 40000);
+        Assert.NotEqual(id, f.Scene.SessionId);
+        Assert.Equal(400, f.Scene.CreateFrame().Snapshot.Combatants[100].DamageAmount);
+    }
+
+    [Fact]
+    public void CombatChainEndsOnBossDeathDespiteUnresolvedEarlierTrash()
+    {
+        var f = new Fixture(); f.Scene.ConfigureAutoSegmentation(true, 30, true);
+        f.Damage(100, 200, 100, 1000);
+        f.Sink.AppendNpcKind(f.Source(1500), 201, NpcKind.Boss);
+        f.Damage(100, 201, 200, 2000);
+        f.Sink.AppendNpcHp(f.Source(2100), 201, 0); f.Sink.CompleteFlush(2101);
+        f.At(3200); f.Scene.CreateFrame();
+        Assert.Equal(PullSegmentState.Frozen, f.Scene.PullState);
+        Assert.Equal("bosses-inactive", f.Scene.PullCompletionReason);
+        Assert.Equal(300, f.Scene.CreateFrame().Snapshot.Combatants[100].DamageAmount);
+    }
+
+    [Fact]
+    public void ManualCollectionRetainsMultiplePacksAcrossLongBreaks()
+    {
+        var f = new Fixture(); f.Scene.ConfigureAutoSegmentation(false);
+        f.Damage(100, 200, 100, 1000); var id = f.Scene.SessionId;
+        f.Damage(100, 201, 200, 180000);
+        Assert.Equal(id, f.Scene.SessionId);
+        Assert.Equal(300, f.Scene.CreateFrame().Snapshot.Combatants[100].DamageAmount);
+    }
+
+    [Fact]
     public void TwoPacksHaveSeparateTotalsAndPreservePlayerIdentity()
     {
         var f = new Fixture();

@@ -149,9 +149,10 @@ public sealed class PulseHistoryWindow : Window
                 _vm.SelectedCombatant = row;
                 _playerPicker.Header = $"Players · {item.DisplayContext.ResolvePcName(row.Id)}";
                 _playerPicker.IsExpanded = false;
-                var tabs = new TabControl { Height = 520 };
+                var tabs = new TabControl { Name = "EncounterDetailTabs", Height = 580 };
                 tabs.Items.Add(new TabItem { Header = "Skills", Content = new CombatantDetailsView { DataContext = _vm.CombatantDetails }, Height = double.NaN });
                 tabs.Items.Add(new TabItem { Header = "Timeline", Content = new SkillEventTimelineView(item.Record.ScenePayload, row.Id, item.DisplayContext) });
+                tabs.Items.Add(new TabItem { Header = "Analysis", Content = new EncounterAnalysisView(item.Record.ScenePayload, row.Id, item.DisplayContext, _vm.EncounterHistory.Select(h => h.Record).ToArray()) });
                 _skills.Content = tabs;
             };
             _players.Children.Add(button);

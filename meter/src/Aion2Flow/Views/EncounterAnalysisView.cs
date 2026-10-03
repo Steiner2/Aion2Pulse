@@ -1,0 +1,206 @@
+using System.Globalization;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Templates;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Cloris.Aion2Flow.Controls;
+using Cloris.Aion2Flow.Services;
+using Cloris.Aion2Flow.SceneRuntime.Archive;
+using Cloris.Aion2Flow.SceneRuntime.Combat;
+using Cloris.Aion2Flow.SceneRuntime.Observation;
+
+namespace Cloris.Aion2Flow.Views;
+
+public sealed class EncounterAnalysisView : UserControl
+{
+    private readonly record struct AnalysisRow(int Skill, string Label, string Value, string Note);
+    private readonly SceneArchivePayload _payload;
+    private readonly int _player;
+    private readonly SceneDisplayContext _display;
+    private readonly IReadOnlyList<ArchivedEncounterRecord> _history;
+    private readonly Slider _from;
+    private readonly Slider _to;
+    private readonly ComboBox _direction = new() { ItemsSource = new[] { "Outgoing", "Incoming" }, SelectedIndex = 0, Width = 125 };
+    private readonly TextBlock _range = Text("");
+    private readonly TabControl _tabs = new() { Name = "AnalysisTabs" };
+    private bool _refreshing;
+
+    public EncounterAnalysisView(SceneArchivePayload payload, int player, SceneDisplayContext display, IReadOnlyList<ArchivedEncounterRecord> history)
+    {
+        _payload = payload; _player = player; _display = display; _history = history;
+        DisplayContextProvider.SetDisplayContext(this, display);
+        var seconds = Math.Max(0.001, (payload.Snapshot.EncounterEndTime - payload.Snapshot.EncounterStartTime + 1) / 1000d);
+        _from = new Slider { Minimum = 0, Maximum = seconds - 0.001, Value = 0, Width = 155 };
+        _to = new Slider { Minimum = 0.001, Maximum = seconds, Value = seconds, Width = 155 };
+        var header = new StackPanel { Spacing = 5 };
+        header.Children.Add(new CombatantDisplay { EntityId = player, IconSize = 18 });
+        var controls = new WrapPanel();
+        controls.Children.Add(Text("From ")); controls.Children.Add(_from); controls.Children.Add(Text(" To ")); controls.Children.Add(_to); controls.Children.Add(_direction);
+        header.Children.Add(controls); header.Children.Add(_range);
+        var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,*"), RowSpacing = 8 };
+        grid.Children.Add(header); Grid.SetRow(_tabs, 1); grid.Children.Add(_tabs); Content = grid;
+        _from.PropertyChanged += (_, e) => { if (e.Property == Slider.ValueProperty) Refresh(); };
+        _to.PropertyChanged += (_, e) => { if (e.Property == Slider.ValueProperty) Refresh(); };
+        _direction.SelectionChanged += (_, _) => Refresh(); Refresh();
+    }
+
+    private static TextBlock Text(string value) => new() { Text = value, TextWrapping = TextWrapping.Wrap, FontSize = 11, Foreground = Brush.Parse("#AAB7C6") };
+    private static string Amount(double value) => value >= 1_000_000 ? $"{value / 1_000_000:0.00}m" : value >= 1000 ? $"{value / 1000:0.0}k" : $"{value:0}";
+    private static Control Page(params Control[] children)
+    {
+        var panel = new StackPanel { Spacing = 8, Margin = new Thickness(0, 8) };
+        foreach (var child in children) panel.Children.Add(child);
+        return new ScrollViewer { Content = panel };
+    }
+    private static Control Rows(IEnumerable<AnalysisRow> source)
+    {
+        var rows = source.ToArray();
+        if (rows.Length == 0) return Text("No observations in this range. Missing data is not proof that an effect did not occur.");
+        return new ListBox { ItemsSource = rows, Height = 210, ItemTemplate = new FuncDataTemplate<AnalysisRow>((row, _) =>
+        {
+            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,120"), RowDefinitions = new RowDefinitions("Auto,Auto"), ColumnSpacing = 8 };
+            Control name = row.Skill > 0 ? new SkillDisplay { SkillCode = row.Skill, IconSize = 20 } : Text(row.Label);
+            grid.Children.Add(name);
+            var value = Text(row.Value); value.TextAlignment = TextAlignment.Right; Grid.SetColumn(value, 1); grid.Children.Add(value);
+            var note = Text(row.Note); Grid.SetRow(note, 1); Grid.SetColumnSpan(note, 2); grid.Children.Add(note); return grid;
+        }) };
+    }
+    private void Add(string name, Control page) => _tabs.Items.Add(new TabItem { Header = name, Content = page });
+    private long Absolute(double seconds) => _payload.Snapshot.EncounterStartTime + (long)Math.Round(seconds * 1000);
+    private string Time(long at) => TimeSpan.FromMilliseconds(Math.Max(0, at - _payload.Snapshot.EncounterStartTime)).ToString(@"mm\:ss\.fff", CultureInfo.InvariantCulture);
+
+    private void Refresh()
+    {
+        if (_refreshing) return;
+        _refreshing = true;
+        try
+        {
+            if (_to.Value <= _from.Value) _to.Value = Math.Min(_to.Maximum, _from.Value + 0.001);
+            var from = Absolute(_from.Value); var to = Absolute(_to.Value); var incoming = _direction.SelectedIndex == 1;
+            var events = EncounterAnalytics.Select(_payload, _player, from, to, incoming);
+            var seconds = Math.Max(0.001, (to - from) / 1000d);
+            var damage = events.Where(e => e.Metric == CombatMetricKind.Damage).Sum(e => (double)e.Amount);
+            var healing = events.Where(e => e.Metric == CombatMetricKind.Healing).Sum(e => (double)e.Amount);
+            _range.Text = $"{_from.Value:0.00}–{_to.Value:0.00}s · {events.Length:N0} observed effects · elapsed range time";
+            var selected = Math.Max(0, _tabs.SelectedIndex); _tabs.Items.Clear();
+            var chart = EncounterAnalytics.Buckets(events, from, to).Select(p => p with { Second = p.Second - _payload.Snapshot.EncounterStartTime / 1000d }).ToArray();
+            Add("Trend", Page(Text($"Damage {Amount(damage)} · DPS {Amount(damage / seconds)} · Healing {Amount(healing)} · HPS {Amount(healing / seconds)}"),
+                new AnalysisTrend(chart, "DPS", "HPS"), Text("Rates use elapsed selected time, including pauses. They can differ from the overlay's active-time rates. Adaptive buckets preserve totals; shields remain separate."),
+                Rows(events.Where(e => e.Metric is CombatMetricKind.ShieldGranted or CombatMetricKind.ShieldAbsorbed).GroupBy(e => e.Metric).Select(g => new AnalysisRow(0, g.Key.ToString(), Amount(g.Sum(e => (double)e.Amount)), "Packet-reported shield amount")))));
+            var skills = EncounterAnalytics.Skills(events);
+            var mechanics = _payload.CreateDetailDelta(_player).MechanicEvents.Where(e => (incoming ? e.TargetId : e.SourceId) == _player && e.ObservedAtMilliseconds >= from && e.ObservedAtMilliseconds < to).ToArray();
+            Add("Skills", Page(Text("Counts refer to observed effects, not casts. Crit/back/front fractions use damage events; multi-hit packets are not expanded into speculative casts."),
+                Text($"Mechanic observations: {mechanics.Sum(e => e.Mechanic.AttemptCount)} attempts · {mechanics.Sum(e => e.Mechanic.EvadeCount)} evades · {mechanics.Sum(e => e.Mechanic.InvincibleCount)} invincible outcomes"),
+                Rows(skills.Select(s => new AnalysisRow(s.Skill, "", $"{Amount(s.Damage)} / {Amount(s.Healing)}", $"{s.Events} effects · crit {s.Critical}/{s.DamageEvents} · back {s.Back}/{s.DamageEvents} · front {s.Front}/{s.DamageEvents} · block {s.Block} · parry {s.Parry} · periodic damage {Amount(s.PeriodicDamage)} · shields {Amount(s.ShieldGranted)} granted / {Amount(s.ShieldAbsorbed)} absorbed")))));
+            var targetEvents = EncounterAnalytics.Targets(_payload, events, incoming);
+            var switches = events.Where(e => e.Metric == CombatMetricKind.Damage).Select(e => incoming ? e.SourceId : e.TargetId).ToArray();
+            var switchCount = switches.Zip(switches.Skip(1)).Count(pair => pair.First != pair.Second);
+            Add("Targets", Page(Text($"{switchCount} successive damage target/source changes. Multi-target packets can create changes without a deliberate target switch."),
+                Rows(targetEvents.Select(t => new AnalysisRow(0, _display.ResolveEntityName(t.Target), Amount(t.Damage), $"{t.Category} · healing {Amount(t.Healing)} · absorbed {Amount(t.ShieldAbsorbed)} · {(damage > 0 ? t.Damage / damage * 100 : 0):0.0}% of selected damage"))),
+                Rows(events.Where(e => e.Metric == CombatMetricKind.Damage).GroupBy(e => EncounterAnalytics.TargetCategory(_payload, incoming ? e.SourceId : e.TargetId)).Select(g => new AnalysisRow(0, g.Key, Amount(g.Sum(e => (double)e.Amount)), "Known boss / other enemy / player / unknown; unknown identities remain separate.")))));
+            AddEffects(from, to);
+            AddReview(from, to);
+            AddComparison(from, to);
+            Add("Coverage", Page(Text("Observed: damage/healing, targets, modifier flags, shields, resources, typed action/cooldown state, aura windows and HP snapshots when received."),
+                Text("Not established: exact cast starts/cancels, effective overheal, interrupts/dispels, threat percentages, position/dodge errors and explicit cutscene/phase boundaries. These require verified Global packet semantics and are not fabricated."),
+                Text($"Capture end: {_payload.Snapshot.Encounter.Reason} · persisted support: {_payload.SupportData.Available} · truncated support: {_payload.SupportData.Truncated}")));
+            _tabs.SelectedIndex = Math.Min(selected, _tabs.Items.Count - 1);
+        }
+        finally { _refreshing = false; }
+    }
+
+    private void AddEffects(long from, long to)
+    {
+        var support = _payload.SupportData;
+        var local = _payload.IdentityScope.TryGetPcMetadata(_player, out var metadata) && metadata.IsLocalPlayer;
+        var auraRows = support.Auras.Where(a => a.EntityId == _player && a.End > from && a.Start < to).GroupBy(a => a.Skill).Select(g =>
+        {
+            var seconds = EncounterAnalytics.ObservedAuraSeconds(g, from, to);
+            return new AnalysisRow(0, _display.ResolveSkillName(g.Key), $"{seconds:0.00}s", $"Observed coverage · {seconds / Math.Max(.001, (to - from) / 1000d) * 100:0.0}% of range · {g.Count()} windows · {string.Join(", ", g.Take(4).Select(a => $"{Time(a.Start)}–{Time(a.End)}"))}{(g.Count() > 4 ? " …" : "")} · {(g.Any(a => a.OpenEnd) ? "open end / bounded by archive" : "bounded observed intervals")}");
+        });
+        var states = support.Events.Where(e => e.At >= from && e.At < to && (e.EntityId == _player || e.EntityId == 0 && local)).Select(e =>
+        {
+            var description = e.Kind switch
+            {
+                SupportEventKind.Health => $"HP {e.Value:N0} / {(e.Maximum is { } max ? max.ToString("N0") : "unknown")}",
+                SupportEventKind.Charges when CooldownChargeObservationDetail.TryDecode(e.Detail, out _, out var charges) => $"{charges} charges · next in {e.Value / 1000d:0.00}s",
+                SupportEventKind.Cooldown => $"remaining {e.Value / 1000d:0.00}s",
+                _ => $"observed phase {e.Value} · state {e.Detail}"
+            };
+            return new AnalysisRow(0, $"{Time(e.At)} · {e.Kind} · {_display.ResolveSkillName(e.Skill)}", description, e.EntityId == 0 ? "Unassigned local-client state; availability is not a cast." : "Typed observation; exact action phase meaning requires Global validation.");
+        });
+        var resources = _payload.CreateDetailDelta(_player).ResourceEvents.Where(e => e.SourceId == _player && e.ObservedAtMilliseconds >= from && e.ObservedAtMilliseconds < to)
+            .Select(e => new AnalysisRow(e.SkillCode, "", $"{e.Amount:N0}", $"{Time(e.ObservedAtMilliseconds)} · {e.Resource.Resource} · {e.Resource.Flow} · {e.Resource.Delivery}; observed change, not a reconstructed balance"));
+        var hp = support.Events.Where(e => e.Kind == SupportEventKind.Health && e.EntityId == _player && e.At >= from && e.At < to).Select(e => new MetricBucket((e.At - _payload.Snapshot.EncounterStartTime) / 1000d, e.Value, e.Maximum ?? 0)).ToArray();
+        Add("Effects", Page(Text(support.Available ? "Observed buffs, cooldowns, charges, actions, HP and resources. Local-client cooldowns do not imply party coverage." : "Legacy archive: support state was not persisted. Combat and resource events remain available."),
+            Rows(auraRows), Rows(states), new AnalysisTrend(hp, "HP", "Max HP"), Rows(resources), Text(support.Truncated ? "Support recording reached its cap; coverage is incomplete." : "Aura coverage is observed coverage, not guaranteed full uptime. Missing observations stay unknown.")));
+    }
+
+    private void AddReview(long from, long to)
+    {
+        var incidentStart = Math.Max(from, to - 5000);
+        var incoming = EncounterAnalytics.Select(_payload, _player, incidentStart, to, true);
+        var rows = incoming.Select(e => new AnalysisRow(e.SkillCode, "", $"{e.Amount:N0} {e.Metric}", $"{Time(e.ObservedAtMilliseconds)} · from {_display.ResolveEntityName(e.SourceId)} · {e.Delivery} · {e.Observation.Modifiers}"));
+        var zeros = _payload.SupportData.Events.Where(e => e.Kind == SupportEventKind.Health && e.EntityId == _player && e.Value <= 0 && e.At >= incidentStart && e.At < to).ToArray();
+        var bossHp = _payload.SupportData.Events.Where(e => e.Kind == SupportEventKind.Health && EncounterAnalytics.TargetCategory(_payload, e.EntityId) == "Boss" && e.At >= from && e.At < to)
+            .Select(e => new AnalysisRow(0, _display.ResolveEntityName(e.EntityId), $"{e.Value:N0}", $"{Time(e.At)} · max {(e.Maximum is { } max ? max.ToString("N0") : "unknown")} · observed HP, not a verified phase boundary"));
+        var charts = _payload.SupportData.Events.Where(e => e.Kind == SupportEventKind.Health && EncounterAnalytics.TargetCategory(_payload, e.EntityId) == "Boss" && e.At >= from && e.At < to)
+            .GroupBy(e => e.EntityId).Take(3).Select(g => (Control)Page(Text(_display.ResolveEntityName(g.Key)),
+                new AnalysisTrend(g.Select(e => new MetricBucket((e.At - _payload.Snapshot.EncounterStartTime) / 1000d, e.Value, e.Maximum ?? 0)).ToArray(), "HP", "Max HP"))).ToArray();
+        var bossCharts = new StackPanel { Spacing = 4 };
+        foreach (var chart in charts) bossCharts.Children.Add(chart);
+        Add("Review", Page(Text($"Incoming events during the last {Math.Min(5, (to - from) / 1000d):0.00}s of the range. {zeros.Length} zero-HP observations; a killing blow is not inferred."),
+            Rows(rows), Text("Boss HP progression · up to three observed bosses"), bossCharts, Rows(bossHp), Text("For a different incident, move the range end. Missing player HP/death evidence prevents a verified death explanation or effective-overheal calculation.")));
+    }
+
+    private void AddComparison(long from, long to)
+    {
+        var relativeStart = from - _payload.Snapshot.EncounterStartTime; var relativeEnd = to - _payload.Snapshot.EncounterStartTime;
+        var rows = _history.Where(r => EncounterAnalytics.ComparableBoss(_payload, r.ScenePayload)).Select(r =>
+        {
+            var p = r.ScenePayload;
+            var pcs = p.Snapshot.Combatants.AsSpan().ToArray().Where(c => c.Metrics.IsVisiblePlayerCombatant).ToArray();
+            var end = Math.Min(p.Snapshot.EncounterEndTime + 1, p.Snapshot.EncounterStartTime + relativeEnd);
+            var start = p.Snapshot.EncounterStartTime + relativeStart;
+            var seconds = Math.Max(0, end - start) / 1000d;
+            var amount = pcs.Sum(pc => EncounterAnalytics.Select(p, pc.Id, start, end).Where(e => e.Metric == CombatMetricKind.Damage).Sum(e => (double)e.Amount));
+            return new AnalysisRow(0, r.ArchivedAt.ToLocalTime().ToString("dd MMM HH:mm"), seconds > 0 ? $"{Amount(amount / seconds)} DPS" : "No overlap",
+                $"{seconds:0.00}s elapsed · {pcs.Length} players · same known boss IDs/map · {p.Snapshot.Encounter.Reason}{(seconds < (relativeEnd - relativeStart) / 1000d ? " · shortened range" : "")}");
+        });
+        Add("Compare", Page(Text("Same known boss and map only. Compare the same elapsed offsets, not inferred phases. Group size, shorter overlap and incomplete capture affect comparability."), Rows(rows)));
+    }
+}
+
+internal sealed class AnalysisTrend(IReadOnlyList<MetricBucket> points, string first, string second) : Control
+{
+    protected override Size MeasureOverride(Size availableSize) => new(double.IsInfinity(availableSize.Width) ? 500 : availableSize.Width, 125);
+    public override void Render(DrawingContext context)
+    {
+        base.Render(context);
+        var text = Brush.Parse("#AAB7C6"); var left = 48d; var right = Math.Max(left + 1, Bounds.Width - 10); var top = 26d; var bottom = 101d;
+        var maximum = Math.Max(1, points.Count == 0 ? 1 : points.Max(p => Math.Max(p.Damage, p.Healing)));
+        void Label(string label, double x, double y, IBrush? color = null)
+        {
+            var value = new FormattedText(label, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, 11, color ?? text);
+            context.DrawText(value, new Point(Math.Clamp(x, 0, Math.Max(0, Bounds.Width - value.Width)), y));
+        }
+        Label(first, 0, 0, Brush.Parse("#71DBC4")); Label(second, 90, 0, Brush.Parse("#A4A5F0")); Label($"{maximum:0}", 0, top); Label("0", 0, bottom - 10);
+        context.DrawLine(new Pen(Brush.Parse("#405463"), 1), new Point(left, top), new Point(left, bottom));
+        context.DrawLine(new Pen(Brush.Parse("#405463"), 1), new Point(left, bottom), new Point(right, bottom));
+        if (points.Count == 0) { Label("No observed points", left + 8, 55); return; }
+        var start = points.Min(p => p.Second); var end = points.Max(p => p.Second); var span = Math.Max(.001, end - start);
+        Label($"{start:0.0}s", left, 105); Label($"{end:0.0}s", right - 35, 105);
+        Point Position(MetricBucket p, bool healing) => new(left + (p.Second - start) / span * (right - left), bottom - Math.Clamp((healing ? p.Healing : p.Damage) / maximum, 0, 1) * (bottom - top));
+        foreach (var healing in new[] { false, true })
+        {
+            var brush = Brush.Parse(healing ? "#A4A5F0" : "#71DBC4"); var pen = new Pen(brush, 1.5);
+            for (var i = 0; i < points.Count; i++)
+            {
+                var at = Position(points[i], healing);
+                if (i > 0) context.DrawLine(pen, Position(points[i - 1], healing), at);
+                if (points.Count < 100) context.DrawEllipse(brush, null, at, 2, 2);
+            }
+        }
+    }
+}

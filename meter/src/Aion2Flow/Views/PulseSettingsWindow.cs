@@ -42,7 +42,6 @@ public sealed class PulseSettingsWindow : Window
             EnumChoice<Cloris.Aion2Flow.SceneRuntime.Model.CombatantStatisticsScope>("Players", CompiledBinding.Create<SettingsFlyoutViewModel, Cloris.Aion2Flow.SceneRuntime.Model.CombatantStatisticsScope>(x => x.CombatantStatisticsScope, mode: BindingMode.TwoWay)),
             Check("Show total and per-second columns", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowDamageColumn, mode: BindingMode.TwoWay)),
             Check("Show per-second column", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowDamagePerSecondColumn, mode: BindingMode.TwoWay)),
-            Check("Show total rate in footer", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowTotalDamagePerSecond, mode: BindingMode.TwoWay)),
             Check("Show player names", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowPlayerNames, mode: BindingMode.TwoWay)),
             Check("Show server names", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowPlayerShortServerName, mode: BindingMode.TwoWay)),
             Check("Show legion names", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowPlayerLegionName, mode: BindingMode.TwoWay)),
@@ -50,12 +49,15 @@ public sealed class PulseSettingsWindow : Window
             Hotkey("Reset fight", vm, GlobalHotkeyAction.BattleReset, CompiledBinding.Create<SettingsFlyoutViewModel, string>(x => x.ResetHotkeyDisplay, mode: BindingMode.TwoWay)),
             Hotkey("Cycle click-through / locked / unlocked", vm, GlobalHotkeyAction.CycleOverlayInteraction, CompiledBinding.Create<SettingsFlyoutViewModel, string>(x => x.OverlayInteractionHotkeyDisplay, mode: BindingMode.TwoWay))));
         tabs.Items.Add(Page("Combat", "Damage and healing share the same combat duration. Results freeze between pulls.",
-            Check("Automatically start a new fight per pull", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.AutoSegmentCombats, mode: BindingMode.TwoWay)),
+            EnumChoice<Cloris.Aion2Flow.SceneRuntime.Model.CombatTrackingBehavior>("Tracking behavior", CompiledBinding.Create<SettingsFlyoutViewModel, Cloris.Aion2Flow.SceneRuntime.Model.CombatTrackingBehavior>(x => x.CombatTracking, mode: BindingMode.TwoWay)),
+            Text("Separate pulls: current behavior. Combat chain: combine normal mobs until the chosen break. Manual: keep collecting until Reset or a map change. Known boss deaths still end chains."),
+            Range("Combat chain break (seconds)", CompiledBinding.Create<SettingsFlyoutViewModel, int>(x => x.CombatChainSeconds, mode: BindingMode.TwoWay), 5, 180),
             Range("Inactivity timeout (seconds)", CompiledBinding.Create<SettingsFlyoutViewModel, int>(x => x.CombatIdleSeconds, mode: BindingMode.TwoWay), 2, 30),
             Check("Exclude long damage pauses from DPS / HPS time", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.PauseDamageTime, mode: BindingMode.TwoWay)),
             Range("Damage pause threshold (seconds)", CompiledBinding.Create<SettingsFlyoutViewModel, int>(x => x.DamagePauseSeconds, mode: BindingMode.TwoWay), 1, 10),
             Text("Uses group damage activity, not a verified cutscene or invulnerability signal. Disable to include all combat time."),
-            EnumChoice<Cloris.Aion2Flow.SceneRuntime.Model.SceneKind>("Combat tracking", CompiledBinding.Create<SettingsFlyoutViewModel, Cloris.Aion2Flow.SceneRuntime.Model.SceneKind>(x => x.SceneKind, mode: BindingMode.TwoWay)),
+            Text("All enemies follows the selected behavior. Boss-only collection uses the legacy boss boundaries instead."),
+            EnumChoice<Cloris.Aion2Flow.SceneRuntime.Model.SceneKind>("Collection scope", CompiledBinding.Create<SettingsFlyoutViewModel, Cloris.Aion2Flow.SceneRuntime.Model.SceneKind>(x => x.SceneKind, mode: BindingMode.TwoWay)),
             EnumChoice<EncounterTimeDisplayFormat>("Time format", CompiledBinding.Create<SettingsFlyoutViewModel, EncounterTimeDisplayFormat>(x => x.EncounterTimeDisplayFormat, mode: BindingMode.TwoWay)),
             Check("Show boss health", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowFocusStatusBar, mode: BindingMode.TwoWay)),
             Check("Enable skill monitor", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.SkillMonitorEnabled, mode: BindingMode.TwoWay))));
@@ -66,7 +68,7 @@ public sealed class PulseSettingsWindow : Window
         tabs.Items.Add(Page("Capture", "Passive network packet recording.", Text("Global Early Access · network only"),
             Text("Capture starts with the meter. Driver, game port and connection status remain visible in the footer."),
             Text("Healing shows amounts reported by the packets. Shield absorption is kept separate in player details.")));
-        tabs.Items.Add(Page("About", "Aion2Pulse Preview", Text("Version 0.4.0-preview.1 · Experimental"), Text("Based on the Aion2Flow packet engine. GPL-3.0 license and upstream credits are included in the package.")));
+        tabs.Items.Add(Page("About", "Aion2Pulse Preview", Text("Version 0.4.0-preview.2 · Experimental"), Text("Based on the Aion2Flow packet engine. GPL-3.0 license and upstream credits are included in the package.")));
         var done = new Button { Content = "Done", HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(22, 7) };
         done.Click += (_, _) => Close();
         var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(20, 10) };
@@ -129,6 +131,11 @@ public sealed class PulseSettingsWindow : Window
         combo.ItemTemplate = new FuncDataTemplate<object>((value, _) => new TextBlock { Text = value switch
         {
             MeterDesign.RaidClassic => "Raid Classic", MeterDesign.FocusGlass => "Focus Glass", MeterDesign.CombatStudio => "Combat Studio",
+            Cloris.Aion2Flow.SceneRuntime.Model.CombatTrackingBehavior.SeparatePulls => "Separate pulls",
+            Cloris.Aion2Flow.SceneRuntime.Model.CombatTrackingBehavior.CombatChain => "Combat chain",
+            Cloris.Aion2Flow.SceneRuntime.Model.CombatTrackingBehavior.Manual => "Manual reset",
+            Cloris.Aion2Flow.SceneRuntime.Model.SceneKind.Standard => "All enemies", Cloris.Aion2Flow.SceneRuntime.Model.SceneKind.Boss => "Boss only",
+            EncounterTimeDisplayFormat.DecimalSeconds => "Seconds", EncounterTimeDisplayFormat.MinutesSeconds => "Minutes : seconds",
             HistoryLayout.SplitView => "Split view", HistoryLayout.CompactList => "Compact list", HistoryLayout.Cards => "Cards",
             CombatantSortMetric.DamagePerSecond => "Damage per second (DPS)", CombatantSortMetric.TotalDamage => "Total damage",
             CombatantSortMetric.HealingPerSecond => "Healing per second (HPS)", CombatantSortMetric.TotalHealing => "Total healing",
@@ -139,8 +146,12 @@ public sealed class PulseSettingsWindow : Window
     }
     private static Control Range(string label, BindingBase property, int min, int max)
     {
-        var input = new NumericUpDown { Minimum = min, Maximum = max, Increment = 1, Width = 100 };
-        input.Bind(NumericUpDown.ValueProperty, property); return Row(label, input);
+        var input = new Slider { Minimum = min, Maximum = max, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 155 };
+        input.Bind(Slider.ValueProperty, property);
+        var value = new TextBlock { MinWidth = 36, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        value.Bind(TextBlock.TextProperty, property);
+        var controls = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        controls.Children.Add(input); controls.Children.Add(value); return Row(label, controls);
     }
     private static Control Check(string label, BindingBase property)
     {

@@ -57,6 +57,8 @@ public sealed partial class SettingsFlyoutViewModel : ObservableObject
             CombatantStatisticsScope = persisted.CombatantStatisticsScope;
             SceneKind = persisted.SceneKind;
             AutoSegmentCombats = persisted.AutoSegmentCombats;
+            CombatTracking = persisted.AutoSegmentCombats ? persisted.CombatTracking : CombatTrackingBehavior.Manual;
+            CombatChainSeconds = persisted.CombatChainSeconds;
             CombatIdleSeconds = persisted.CombatIdleSeconds;
             PauseDamageTime = persisted.PauseDamageTime;
             DamagePauseSeconds = persisted.DamagePauseSeconds;
@@ -617,6 +619,8 @@ public sealed partial class SettingsFlyoutViewModel : ObservableObject
             s.CombatantStatisticsScope = CombatantStatisticsScope;
             s.SceneKind = SceneKind;
             s.AutoSegmentCombats = AutoSegmentCombats;
+            s.CombatTracking = CombatTracking;
+            s.CombatChainSeconds = CombatChainSeconds;
             s.CombatIdleSeconds = CombatIdleSeconds;
             s.PauseDamageTime = PauseDamageTime;
             s.DamagePauseSeconds = DamagePauseSeconds;

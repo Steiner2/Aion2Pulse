@@ -167,7 +167,7 @@ public sealed partial class MainViewModel : FrameBatchedObservableObject, IAsync
     public string LatencyToolTip
     {
         get;
-        set => SetFrameProperty(ref field, value);
+        set { SetFrameProperty(ref field, value); OnPropertyChanged(nameof(FooterToolTip)); }
     } = string.Empty;
 
     [ObservableProperty]
@@ -213,7 +213,7 @@ public sealed partial class MainViewModel : FrameBatchedObservableObject, IAsync
         if (_captureService.Scene.Kind != SettingsFlyout.SceneKind)
             _captureService.Scene.ChangeKind(SettingsFlyout.SceneKind, _captureService.Scene.SessionStarted, archiveCurrent: false);
         _captureService.Scene.SetCombatantStatisticsScope(SettingsFlyout.CombatantStatisticsScope);
-        _captureService.Scene.ConfigureAutoSegmentation(SettingsFlyout.AutoSegmentCombats, SettingsFlyout.CombatIdleSeconds);
+        _captureService.Scene.ConfigureAutoSegmentation(SettingsFlyout.EffectiveAutoSegment, SettingsFlyout.EffectiveIdleSeconds, SettingsFlyout.CombatTracking == CombatTrackingBehavior.CombatChain);
         _captureService.Scene.ConfigureDamagePause(SettingsFlyout.PauseDamageTime, SettingsFlyout.DamagePauseSeconds);
         CombatantColumns = new CombatantColumnLayoutViewModel(frameBatchService);
         ApplyCombatantMetricDisplaySettings();
@@ -293,15 +293,13 @@ public sealed partial class MainViewModel : FrameBatchedObservableObject, IAsync
             Dispatcher.UIThread.Post(() => RefreshDisplayedSnapshot());
         else if (e.PropertyName == nameof(SettingsFlyoutViewModel.SceneKind))
             Dispatcher.UIThread.Post(ChangeSceneKind);
-        else if (e.PropertyName == nameof(SettingsFlyoutViewModel.AutoSegmentCombats) ||
-                 e.PropertyName == nameof(SettingsFlyoutViewModel.CombatIdleSeconds))
+        else if (e.PropertyName is nameof(SettingsFlyoutViewModel.AutoSegmentCombats) or nameof(SettingsFlyoutViewModel.CombatIdleSeconds) or nameof(SettingsFlyoutViewModel.CombatTracking) or nameof(SettingsFlyoutViewModel.CombatChainSeconds))
             Dispatcher.UIThread.Post(() =>
             {
-                if (e.PropertyName == nameof(SettingsFlyoutViewModel.AutoSegmentCombats))
-                    CloseCurrentArchiveScope("segmentation-settings", isAutomatic: true);
-                _captureService.Scene.ConfigureAutoSegmentation(SettingsFlyout.AutoSegmentCombats, SettingsFlyout.CombatIdleSeconds);
-                if (e.PropertyName == nameof(SettingsFlyoutViewModel.AutoSegmentCombats))
-                    ResetLivePresentation();
+                CloseCurrentArchiveScope("segmentation-settings", isAutomatic: true);
+                _captureService.Scene.Reset();
+                _captureService.Scene.ConfigureAutoSegmentation(SettingsFlyout.EffectiveAutoSegment, SettingsFlyout.EffectiveIdleSeconds, SettingsFlyout.CombatTracking == CombatTrackingBehavior.CombatChain);
+                ResetLivePresentation();
             });
         else if (e.PropertyName is nameof(SettingsFlyoutViewModel.PauseDamageTime) or nameof(SettingsFlyoutViewModel.DamagePauseSeconds))
             Dispatcher.UIThread.Post(() =>
@@ -526,7 +524,7 @@ public sealed partial class MainViewModel : FrameBatchedObservableObject, IAsync
     {
         SegmentStatus = IsViewingOverall ? "OVERALL · COMBAT TIME" : IsViewingArchivedEncounter ? "HISTORY" :
             snapshot.Encounter.IsActive && _captureService.Scene.IsDamageTimePaused ? "PAUSED · NO GROUP DAMAGE" :
-            !SettingsFlyout.AutoSegmentCombats || snapshot.Kind == SceneKind.Boss ? "CONTINUOUS" :
+            !SettingsFlyout.EffectiveAutoSegment || snapshot.Kind == SceneKind.Boss ? "CONTINUOUS" :
             snapshot.Encounter.Reason switch
             {
                 "recording" => "IN COMBAT",

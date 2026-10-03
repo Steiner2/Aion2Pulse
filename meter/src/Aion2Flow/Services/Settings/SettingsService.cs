@@ -85,6 +85,12 @@ public sealed class SettingsService
     private static AppSettings Clone(AppSettings source) => new()
     {
         TopmostMode = source.TopmostMode,
+        MeterDesign = source.MeterDesign, HistoryLayout = source.HistoryLayout,
+        OverlayWidth = source.OverlayWidth, PlayerRowHeight = source.PlayerRowHeight,
+        SurfaceIntensity = source.SurfaceIntensity, UseClassColors = source.UseClassColors,
+        ShowBothMetrics = source.ShowBothMetrics,
+        PauseDamageTime = source.PauseDamageTime, DamagePauseSeconds = source.DamagePauseSeconds,
+        CombatTracking = source.CombatTracking, CombatChainSeconds = source.CombatChainSeconds,
         MaxVisibleCombatantRows = source.MaxVisibleCombatantRows,
         CombatantSortMetric = source.CombatantSortMetric,
         CombatantStatisticsScope = source.CombatantStatisticsScope,

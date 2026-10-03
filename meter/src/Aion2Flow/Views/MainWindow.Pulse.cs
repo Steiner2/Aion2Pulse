@@ -11,6 +11,13 @@ namespace Cloris.Aion2Flow.Views;
 
 public partial class MainWindow
 {
+    private void CycleDesign(object? sender, RoutedEventArgs e) => DataContext.SettingsFlyout.MeterDesign = (MeterDesign)(((int)DataContext.SettingsFlyout.MeterDesign + 1) % 3);
+    private void CycleTracking(object? sender, RoutedEventArgs e)
+    {
+        var settings = DataContext.SettingsFlyout;
+        settings.AutoSegmentCombats = true;
+        settings.CombatTracking = (Cloris.Aion2Flow.SceneRuntime.Model.CombatTrackingBehavior)(((int)settings.CombatTracking + 1) % 3);
+    }
     private void ResizePulseWidth(object? sender, VectorEventArgs e)
     {
         if (_overlayInteractionController.Mode != OverlayInteractionMode.Interactive) return;

@@ -13,6 +13,7 @@ public sealed partial class MainViewModel
     public double TotalFilteredHealingPerSecond { get; private set => SetFrameProperty(ref field, value); }
     public double DisplayTotalAmount { get; private set => SetFrameProperty(ref field, value); }
     public double DisplayTotalRate { get; private set => SetFrameProperty(ref field, value); }
+    public string FooterToolTip => $"{DriverIndicatorToolTip}\n{GamePortIndicatorToolTip}\n{CaptureLockIndicatorToolTip}\n{LatencyToolTip}";
     public string RoundTripTimeDisplay => RoundTripTimeMilliseconds > 0 ? $"{RoundTripTimeMilliseconds} ms" : "— ms";
     public string HistoryStorageStatus => _encounterArchiveService.StorageError ?? "History saved locally";
     private void OnHistoryStorageStatusChanged(object? sender, EventArgs e)

@@ -2,11 +2,11 @@
   <img src="docs/assets/banner.svg" alt="Aion2Pulse — Damage and healing. One clear view." width="100%">
 </p>
 
-> **0.4.0-preview.1 — experimental preview.** This branch adds tighter overlay
-> columns, independent boss/pull retention and a skill-effect timeline. These
-> changes are not included in the published 0.3.3 release. Further proposed
-> analyses and their evidence limits are documented in the
-> [packet analysis roadmap](docs/packet-analysis-roadmap.md).
+> **0.4.0-preview.2 — experimental preview.** Compact overlays, configurable
+> pull grouping, sliders and additional encounter analysis are available on this
+> branch. These changes are not included in the published 0.3.3 release. See the
+> [packet analysis roadmap](docs/packet-analysis-roadmap.md) for evidence limits.
+
 
 <p align="center">
   <strong>A DPS and healing meter for AION 2.</strong><br>
@@ -39,7 +39,7 @@
 | Raid Classic | Focus Glass | Combat Studio |
 | :---: | :---: | :---: |
 | ![Raid Classic with synthetic data](docs/assets/pulse-RaidClassic.png) | ![Focus Glass with synthetic data](docs/assets/pulse-FocusGlass.png) | ![Combat Studio with synthetic data](docs/assets/pulse-CombatStudio.png) |
-| Familiar class bars. | A compact, open layout. | A wider view with room for detail. |
+| Familiar class bars. | A compact, open layout. | A compact layout with subtle separators. |
 
 All three designs support interface scaling, class colors, adjustable transparency
 and the combined damage/DPS/healing/HPS view. **DPS remains the default.**
@@ -86,6 +86,33 @@ a separate window. Changes are saved automatically.
 
 The Windows package includes the .NET runtime and WinDivert. Npcap is not required.
 Keep the `history/` folder next to the application when updating.
+
+## Tracking and encounter analysis
+
+Choose **Settings → Combat → Tracking behavior**:
+
+| Mode | Behavior |
+| --- | --- |
+| Separate pulls (default) | Each completed pull gets its own result. Normal-mob inactivity defaults to five seconds. |
+| Combat chain | Keep nearby normal-mob packs together until the selected break, 30 seconds by default (5–180 seconds). A known boss ending still closes the chain. |
+| Manual reset | Collect across packs and long breaks until Reset or a map transition. |
+
+All three modes apply to **All enemies** collection. The legacy boss-only scope
+uses boss encounter boundaries. Changing tracking or timing starts a fresh result.
+The title shortcuts cycle the display metric, design (**S**) and tracking
+(**P** pulls / **C** chain / **M** manual). Reset and history remain alongside them.
+Settings stay on the bottom gear; the footer contains connection status and time.
+Appearance sliders update scale, row height and surface intensity immediately.
+
+Select a player in history, then open **Analysis**. Its selectable time range
+covers DPS/HPS trends, skill modifiers, direct/periodic damage, shields, targets,
+observed buff windows, cooldown/charge state, resources, HP snapshots, incoming
+incident review and comparable boss attempts. Graph rates use elapsed range time;
+the overlay can use its active damage clock. Missing observations stay unknown.
+New version-2 archives retain compact support observations; older version-1
+archives still load without inventing missing historical state.
+
+![Encounter analysis using synthetic data](docs/assets/pulse-analysis-0.png)
 
 ## Combat timing
 

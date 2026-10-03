@@ -16,14 +16,15 @@ public sealed partial class SceneLiveReadModel
     public PullSegmentState PullState { get { lock (_gate) return _pull.State; } }
     public string PullCompletionReason { get { lock (_gate) return _pull.CompletionReason; } }
 
-    public void ConfigureAutoSegmentation(bool enabled, int idleSeconds = 5)
+    public void ConfigureAutoSegmentation(bool enabled, int idleSeconds = 5, bool mergeAdjacentPulls = false)
     {
         lock (_gate)
         {
-            if (_autoSegmentEnabled != enabled)
+            if (_autoSegmentEnabled != enabled || _pull.MergeAdjacentPulls != mergeAdjacentPulls)
                 ResetCore(_timeProvider.GetUtcNow());
             _autoSegmentEnabled = enabled;
-            _pull.IdleTimeoutMilliseconds = Math.Clamp(idleSeconds, 2, 30) * 1_000L;
+            _pull.MergeAdjacentPulls = mergeAdjacentPulls;
+            _pull.IdleTimeoutMilliseconds = Math.Clamp(idleSeconds, 2, mergeAdjacentPulls ? 180 : 30) * 1_000L;
         }
     }
 

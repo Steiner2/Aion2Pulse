@@ -9,7 +9,8 @@ namespace Cloris.Aion2Flow.SceneRuntime.Archive;
 // Explicit versioned disk format; runtime journals and packet buffers never enter the file.
 internal sealed class StoredEncounter
 {
-    public int Version { get; init; } = 1;
+    public int Version { get; init; } = 2;
+    public EncounterSupportData Support { get; init; } = new();
     public Guid Id { get; init; }
     public DateTimeOffset ArchivedAt { get; init; }
     public string Trigger { get; init; } = "";

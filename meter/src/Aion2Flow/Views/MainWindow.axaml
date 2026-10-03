@@ -69,7 +69,8 @@
                                 Orientation="Horizontal"
                                 Spacing="2">
                         <Button x:Name="MetricModeButton" Classes="WindowBtn" Click="ToggleHealing" ToolTip.Tip="Cycle DPS, HPS and DPS + HPS" Width="60"><TextBlock Text="{Binding SettingsFlyout.MetricModeLabel}" FontSize="10" /></Button>
-                        <Button Classes="WindowBtn" Click="OpenSettings" ToolTip.Tip="Settings"><Path Classes="Glyph GlyphSm" Data="{StaticResource settings}" /></Button>
+                        <Button Classes="WindowBtn" Click="CycleDesign" Width="22" ToolTip.Tip="Cycle overlay designs"><TextBlock Text="S" FontSize="10" /></Button>
+                        <Button Classes="WindowBtn" Click="CycleTracking" Width="22" ToolTip.Tip="{Binding SettingsFlyout.TrackingDescription}"><TextBlock Text="{Binding SettingsFlyout.TrackingShortcutLabel}" FontSize="10" /></Button>
                         <Button Classes="WindowBtn MinBtn"
                                 Click="Minimize">
                             <Path Classes="Glyph GlyphSm" Data="{StaticResource minus}" />
@@ -323,24 +324,12 @@
                             Spacing="6"
                             VerticalAlignment="Center"
                             ToolTip.Tip="{Binding Status}">
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="4"
-                                VerticalAlignment="Center">
-                        <Border Classes="BottomBarStatusIndicator"
-                                Background="{Binding DriverIndicatorColor}"
-                                ToolTip.Tip="{Binding DriverIndicatorToolTip}" />
-                        <Border Classes="BottomBarStatusIndicator"
-                                Background="{Binding GamePortIndicatorColor}"
-                                ToolTip.Tip="{Binding GamePortIndicatorToolTip}" />
-                        <Border Classes="BottomBarStatusIndicator"
-                                Background="{Binding CaptureLockIndicatorColor}"
-                                ToolTip.Tip="{Binding CaptureLockIndicatorToolTip}" />
-                    </StackPanel>
+
 
                     <StackPanel Orientation="Horizontal"
                                 Spacing="4"
                                 VerticalAlignment="Center"
-                                ToolTip.Tip="{Binding LatencyToolTip}">
+                                ToolTip.Tip="{Binding FooterToolTip}">
                         <Path Classes="Glyph GlyphMd BottomBarSignalGlyph"
                               Data="{StaticResource wifi}"
                               Stroke="{Binding LatencyIndicatorColor}" />
@@ -353,33 +342,6 @@
                             Spacing="3"
                             VerticalAlignment="Center"
                             HorizontalAlignment="Right">
-                    <controls:NumericBlock Classes="BottomBarMetric" Value="{Binding DisplayTotalAmount}"
-                                           UseCompactNotation="True" CompactThreshold="1000" CompactSignificantDigits="3"
-                                           Formatter="N0" Margin="0,0,5,0" ToolTip.Tip="{Binding SettingsFlyout.AmountLabel}" />
-                    <controls:NumericBlock Classes="BottomBarMetric BottomBarTotalDps"
-                                           ToolTip.Tip="{Binding SettingsFlyout.RateLabel}"
-                                           IsVisible="{Binding CombatantColumns.ShowTotalDamagePerSecond}"
-                                           Value="{Binding DisplayTotalRate}"
-                                           Suffix="/s"
-                                           Formatter="N0"
-                                           UseCompactNotation="{Binding CombatantColumns.UseCompactMainMetrics}"
-                                           CompactThreshold="1000"
-                                           CompactSignificantDigits="3"
-                                           StableWidthScopeKey="{Binding NumericStableWidthScopeKey}"
-                                           Margin="0,0,5,0"
-                                           HorizontalAlignment="Right"
-                                           TextAlignment="Right"
-                                           VerticalAlignment="Center" />
-
-                    <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding SettingsFlyout.ShowBothMetrics}">
-                        <controls:NumericBlock Classes="BottomBarMetric" Value="{Binding TotalFilteredHealing}"
-                                               UseCompactNotation="True" CompactThreshold="1000" CompactSignificantDigits="3"
-                                               Formatter="N0" ToolTip.Tip="Total healing" />
-                        <controls:NumericBlock Classes="BottomBarMetric" Value="{Binding TotalFilteredHealingPerSecond}"
-                                               IsVisible="{Binding CombatantColumns.ShowTotalDamagePerSecond}"
-                                               UseCompactNotation="True" CompactThreshold="1000" CompactSignificantDigits="3"
-                                               Formatter="N0" Suffix=" HPS" ToolTip.Tip="Healing per second" />
-                    </StackPanel>
                     <controls:DurationBlock Classes="BottomBarMetric"
                                             Duration="{Binding EncounterDuration}"
                                             DisplayFormat="{Binding SettingsFlyout.EncounterTimeDisplayFormat}"

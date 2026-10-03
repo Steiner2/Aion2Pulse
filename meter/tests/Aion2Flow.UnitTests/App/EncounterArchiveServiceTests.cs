@@ -58,8 +58,36 @@ public sealed class EncounterArchiveServiceTests
         Assert.Equal(outgoingTimeline, Cloris.Aion2Flow.Views.SkillEventTimelineView.Events(restored.ScenePayload, 200, true));
         Assert.Equal(payload.CreateDetailDelta(100).MechanicEvents, restored.ScenePayload.CreateDetailDelta(100).MechanicEvents);
         Assert.Equal(payload.CreateDetailDelta(100).OutgoingPairs, restored.ScenePayload.CreateDetailDelta(100).OutgoingPairs);
+        Assert.True(restored.ScenePayload.SupportData.Available);
+        Assert.Contains(restored.ScenePayload.SupportData.Events, e => e.Kind == SupportEventKind.Health);
+        Assert.Equal(payload.SupportData.Events, restored.ScenePayload.SupportData.Events);
+        Assert.Equal(payload.SupportData.Auras, restored.ScenePayload.SupportData.Auras);
         Assert.True(restored.ScenePayload.TimelineSegment.IsEmpty);
         Assert.Equal("idle-heuristic", restored.Trigger);
+    }
+
+    [Fact]
+    public async Task VersionOneHistoryStillLoadsWithoutSupportObservations()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"pulse-v1-{Guid.NewGuid():N}");
+        await using (var writer = new EncounterArchiveService(directory))
+        {
+            writer.Archive(CreateSceneOwner(100, 200).CreateArchivePayload(), "manual", false);
+            await writer.FlushAsync();
+            Assert.Null(writer.StorageError);
+        }
+        var path = Assert.Single(Directory.GetFiles(directory, "*.json"));
+        var json = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken))!.AsObject();
+        var version = json.Select(p => p.Key).Single(k => k.Equals("Version", StringComparison.OrdinalIgnoreCase));
+        var support = json.Select(p => p.Key).Single(k => k.Equals("Support", StringComparison.OrdinalIgnoreCase));
+        json[version] = 1;
+        json.Remove(support);
+        await File.WriteAllTextAsync(path, json.ToJsonString(), TestContext.Current.CancellationToken);
+        await using var reader = new EncounterArchiveService(directory);
+        Assert.True(reader.StorageError is null, reader.StorageError);
+        var restored = Assert.Single(reader.History);
+        Assert.False(restored.ScenePayload.SupportData.Available);
+        Assert.Equal(2, restored.ScenePayload.CreateDetailDelta(100).MetricEvents.Count);
     }
 
     [Fact]

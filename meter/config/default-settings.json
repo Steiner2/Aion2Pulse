@@ -4,6 +4,8 @@
   "CombatantStatisticsScope": "Party",
   "AutoSegmentCombats": true,
   "CombatIdleSeconds": 5,
+  "CombatTracking": "SeparatePulls",
+  "CombatChainSeconds": 30,
   "PlayerSelfMarkerDisplayMode": "Always",
   "SkillMonitorEnabled": false,
   "UiScalePercent": 100,

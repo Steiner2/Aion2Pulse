@@ -25,6 +25,8 @@ public sealed class AppSettings
     public SceneKind SceneKind { get; set; } = SceneKind.Standard;
 
     public bool AutoSegmentCombats { get; set; } = true;
+    public CombatTrackingBehavior CombatTracking { get; set => field = Enum.IsDefined(value) ? value : CombatTrackingBehavior.SeparatePulls; }
+    public int CombatChainSeconds { get; set => field = Math.Clamp(value, 5, 180); } = 30;
 
     public int CombatIdleSeconds { get; set => field = Math.Clamp(value, 2, 30); } = 5;
     public bool PauseDamageTime { get; set; } = true;
