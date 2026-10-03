@@ -34,12 +34,17 @@ public sealed class PulseHistoryWindow : Window
         _vm = vm; Title = "Aion2Pulse / Combat history"; Width = 1050; Height = 720; MinWidth = 740; MinHeight = 500;
         Background = Brush.Parse("#10161E"); Foreground = Brush.Parse("#EDF3F8"); RequestedThemeVariant = ThemeVariant.Dark;
         Styles.Add(new Cloris.Aion2Flow.Styles.PulseWindowTheme());
+        PulseHelp.Tip(_filter, "Bosses is the default. Normal pulls have a separate 50-fight limit and cannot evict saved bosses. Incomplete shows known capture interruptions.");
+        PulseHelp.Tip(_search, "Filter saved encounters by name, displayed date/time or end reason. This does not delete or change history.");
+        PulseHelp.Tip(_splitter, "Drag to give more space to the fight list or details. Narrow windows stack the two panels.");
+        PulseHelp.Tip(_playerPicker, "Expand to choose another recorded player. Selecting one opens their skills, event timeline and analysis.");
+        PulseHelp.Tip(_status, "Bosses and normal pulls are retained independently, 50 each. A storage warning means saving or loading needs attention.");
         _list = new ScrollViewer { Content = _fights };
         var toolbar = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16) };
         toolbar.Children.Add(_filter); toolbar.Children.Add(_search);
-        var live = new Button { Content = "Live", Command = vm.ReturnToLiveCommand }; toolbar.Children.Add(live);
-        var overall = new Button { Content = "Instance totals", Command = vm.ShowOverallCommand }; toolbar.Children.Add(overall);
-        toolbar.Children.Add(new Button { Content = "New total", Command = vm.ResetOverallCommand });
+        var live = new Button { Content = "Live", Command = vm.ReturnToLiveCommand }; PulseHelp.Tip(live, "Return the overlay to the current live fight; keep saved history intact."); toolbar.Children.Add(live);
+        var overall = new Button { Content = "Instance totals", Command = vm.ShowOverallCommand }; PulseHelp.Tip(overall, "Show combined recorded combat for the current map visit. Breaks between archived fights are excluded from the overall combat clock."); toolbar.Children.Add(overall);
+        toolbar.Children.Add(PulseHelp.Tip(new Button { Content = "New total", Command = vm.ResetOverallCommand }, "Save the current fight, clear the overall total and start a fresh overall measurement. Saved history is retained."));
         foreach (var child in toolbar.Children) child.Margin = new Thickness(0, 0, 8, 4);
         _playerPicker.Content = _players;
         _detail.Children.Add(_selected); _detail.Children.Add(_playerPicker); _detail.Children.Add(_skills);
@@ -88,7 +93,7 @@ public sealed class PulseHistoryWindow : Window
     internal static string EndReason(string reason) => reason switch
     {
         "capture-interrupted" => "Capture interrupted · incomplete", "idle-heuristic" => "Inactivity timeout",
-        "enemies-inactive" => "Combat ended", "recording" => "In progress", "manual-reset" => "Manual reset",
+        "enemies-inactive" => "Combat ended", "bosses-inactive" => "Boss encounter ended", "recording" => "In progress", "manual-reset" => "Manual reset",
         "map-transition" => "Map changed", _ => string.IsNullOrWhiteSpace(reason) ? "Saved fight" : reason
     };
     private void RefreshList()
@@ -117,6 +122,7 @@ public sealed class PulseHistoryWindow : Window
             row.Children.Add(new TextBlock { Text = $"{TimeSpan.FromMilliseconds(snapshot.EncounterTime):m\\:ss} · {Number(t.Damage)} damage · {Number(t.Dps)} DPS", FontSize = 12, TextWrapping = TextWrapping.Wrap });
             row.Children.Add(new TextBlock { Text = $"{Number(t.Healing)} healing · {Number(t.Hps)} HPS · {reason}", FontSize = 11, Foreground = Brush.Parse("#AAB7C6"), TextWrapping = TextWrapping.Wrap });
             var button = new Button { Content = row, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(10, card ? 14 : 8), Background = Brush.Parse(_vm.SelectedEncounterHistory?.Record.Id == item.Record.Id ? "#203B3D" : "#18212C") };
+            PulseHelp.Tip(button, $"Open this saved result. {reason}. Its rates use recorded combat time; the Analysis tab can inspect elapsed-time ranges separately.");
             button.Click += (_, _) => { _vm.SelectedEncounterHistory = item; RefreshDetail(); }; _fights.Children.Add(button);
         }
         if (_fights.Children.Count == 0) _fights.Children.Add(new TextBlock { Text = _filter.SelectedIndex == 1 ? "No saved bosses. Select Normal pulls or All fights to see other encounters." : "No matching fights", TextWrapping = TextWrapping.Wrap });
@@ -144,6 +150,7 @@ public sealed class PulseHistoryWindow : Window
             var damage = new TextBlock { Text = $"{Number(row.Damage)} / {Number(row.DamagePerSecond)}", HorizontalAlignment = HorizontalAlignment.Right, FontSize = 12 }; Grid.SetColumn(damage, 1); grid.Children.Add(damage);
             var healing = new TextBlock { Text = $"{Number(row.Healing)} / {Number(row.HealingPerSecond)}", HorizontalAlignment = HorizontalAlignment.Right, FontSize = 12 }; Grid.SetColumn(healing, 2); grid.Children.Add(healing);
             var button = new Button { Content = grid, HorizontalContentAlignment = HorizontalAlignment.Stretch, HorizontalAlignment = HorizontalAlignment.Stretch };
+            PulseHelp.Tip(button, "Select this player to inspect skills, the chronological effect timeline and the packet analysis tabs.");
             button.Click += (_, _) =>
             {
                 _vm.SelectedCombatant = row;
@@ -153,6 +160,7 @@ public sealed class PulseHistoryWindow : Window
                 tabs.Items.Add(new TabItem { Header = "Skills", Content = new CombatantDetailsView { DataContext = _vm.CombatantDetails }, Height = double.NaN });
                 tabs.Items.Add(new TabItem { Header = "Timeline", Content = new SkillEventTimelineView(item.Record.ScenePayload, row.Id, item.DisplayContext) });
                 tabs.Items.Add(new TabItem { Header = "Analysis", Content = new EncounterAnalysisView(item.Record.ScenePayload, row.Id, item.DisplayContext, _vm.EncounterHistory.Select(h => h.Record).ToArray()) });
+                foreach (var tab in tabs.Items.OfType<TabItem>()) PulseHelp.Tip(tab, tab.Header?.ToString() switch { "Skills" => "Original skill icons and totals for this player.", "Timeline" => "Select or hover recorded damage, heal or shield markers. Timestamps describe observed effects, not cast starts.", _ => "Select a time range and inspect trends, targets, support effects, incoming events or matching bosses." });
                 _skills.Content = tabs;
             };
             _players.Children.Add(button);

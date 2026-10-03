@@ -28,7 +28,7 @@ public partial class MainWindow
     private void OpenSettings(object? sender, RoutedEventArgs e)
     {
         if (_settingsWindow is not null) { _settingsWindow.Activate(); return; }
-        _settingsWindow = new PulseSettingsWindow(DataContext.SettingsFlyout);
+        _settingsWindow = new PulseSettingsWindow(DataContext.SettingsFlyout, new SkillMonitorSettingsViewModel(_pulseResources, _settingsService, _localization));
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show(this);
     }

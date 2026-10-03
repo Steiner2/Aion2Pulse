@@ -73,6 +73,9 @@ public sealed class ProtocolRoundTripEstimatorTests
         var observedTimestamp = Stopwatch.GetTimestamp();
         estimator.TryObserveEcho(SessionGeneration, 1_000, 1_080, observedTimestamp, observedTimestamp, out _);
 
+        Assert.Equal(30000, estimator.GetSampleAgeMilliseconds(SessionGeneration, observedTimestamp + 30 * Stopwatch.Frequency));
+        Assert.Null(estimator.GetSampleAgeMilliseconds(SessionGeneration + 1, observedTimestamp));
+        Assert.Null(estimator.GetSampleAgeMilliseconds(SessionGeneration, observedTimestamp - 1));
         Assert.Equal(80, estimator.GetCurrentMilliseconds(SessionGeneration, observedTimestamp + 30 * Stopwatch.Frequency));
         Assert.Null(estimator.GetCurrentMilliseconds(SessionGeneration, observedTimestamp + 30 * Stopwatch.Frequency + 1));
     }
@@ -85,6 +88,7 @@ public sealed class ProtocolRoundTripEstimatorTests
         estimator.TryObserveEcho(SessionGeneration, 1_000, 1_080, observedTimestamp, observedTimestamp, out _);
 
         estimator.Clear();
+        Assert.Null(estimator.GetSampleAgeMilliseconds(SessionGeneration, observedTimestamp));
 
         Assert.Null(estimator.GetCurrentMilliseconds(SessionGeneration, observedTimestamp));
     }

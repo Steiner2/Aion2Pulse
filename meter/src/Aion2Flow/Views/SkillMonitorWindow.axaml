@@ -199,7 +199,7 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <Border Classes="MonitorWidthResizeGrip"
+            <Border Classes="MonitorWidthResizeGrip" ToolTip.Tip="Drag to change the skill monitor width while unlocked. Its scale is independent of the DPS overlay."
                     Grid.RowSpan="2"
                     PointerPressed="ResizeWindow"
                     IsHitTestVisible="True" />

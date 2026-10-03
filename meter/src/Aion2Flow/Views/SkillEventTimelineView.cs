@@ -25,7 +25,11 @@ public sealed class SkillEventTimelineView : UserControl
         DisplayContextProvider.SetDisplayContext(this, display);
         var list = new ListBox { MinHeight = 80, Margin = new Thickness(0, 8) };
         var chart = new EventStrip(payload.Snapshot.EncounterStartTime, payload.Snapshot.EncounterEndTime);
+        chart.DescribeEvent = e => $"{display.ResolveSkillName(e.SkillCode)} · {(e.ObservedAtMilliseconds - payload.Snapshot.EncounterStartTime) / 1000d:0.000}s · {e.Amount:N0} {e.Metric} · {e.Delivery} · {e.Observation.Modifiers} · from {display.ResolveEntityName(e.SourceId)} to {display.ResolveEntityName(e.TargetId)}";
         var direction = new ComboBox { ItemsSource = new[] { "Outgoing events", "Incoming events" }, SelectedIndex = 0, Width = 175 };
+        PulseHelp.Tip(direction, "Outgoing shows this player's damage, healing and shields. Incoming shows events whose recorded target is this player.");
+        PulseHelp.Tip(chart, "Damage markers sit above the line; healing and shields below. Hover for the nearest effect, or click a marker to select its full list entry.");
+        PulseHelp.Tip(list, "Select a recorded effect to see its skill, target/source, amount, delivery and modifier flags. Multiple effects can belong to one cast.");
         var panel = new StackPanel { Spacing = 10 };
         panel.Children.Add(new TextBlock { Text = "Skill event timeline", FontSize = 16 });
         panel.Children.Add(new CombatantDisplay { EntityId = player, IconSize = 20 });
@@ -39,7 +43,7 @@ public sealed class SkillEventTimelineView : UserControl
             grid.Children.Add(new TextBlock { Text = TimeSpan.FromMilliseconds(elapsed).ToString(@"mm\:ss\.fff", CultureInfo.InvariantCulture), FontSize = 11, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center });
             var skill = new SkillDisplay { SkillCode = e.SkillCode, IconSize = 22, IconSpacing = 6 }; Grid.SetColumn(skill, 1); grid.Children.Add(skill);
             var amount = new TextBlock { Text = $"{e.Amount:N0} {e.Metric}", FontSize = 11, TextWrapping = TextWrapping.Wrap, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right }; Grid.SetColumn(amount, 2); grid.Children.Add(amount);
-            return grid;
+            return PulseHelp.Tip(grid, $"{display.ResolveSkillName(e.SkillCode)} · {e.Amount:N0} {e.Metric} · {e.Delivery} · {e.Observation.Modifiers} · from {display.ResolveEntityName(e.SourceId)} to {display.ResolveEntityName(e.TargetId)}");
         });
         var selected = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12 };
         void Refresh()
@@ -65,6 +69,7 @@ public sealed class SkillEventTimelineView : UserControl
     private sealed class EventStrip(long start, long end) : Control
     {
         public CombatMetricDetailEvent[] Events { get; set; } = [];
+        public Func<CombatMetricDetailEvent, string>? DescribeEvent { get; set; }
         public Action<CombatMetricDetailEvent>? SelectEvent { get; set; }
         private readonly IBrush _damage = Brush.Parse("#71DBC4");
         private readonly IBrush _healing = Brush.Parse("#A4A5F0");
@@ -89,6 +94,16 @@ public sealed class SkillEventTimelineView : UserControl
                 var x = Position(e.ObservedAtMilliseconds); var damage = e.Metric == CombatMetricKind.Damage;
                 if (occupied.Add(((int)x, damage))) context.DrawEllipse(damage ? _damage : _healing, null, new Point(x, damage ? 36 : 60), 3, 3);
             }
+        }
+        protected override void OnPointerMoved(PointerEventArgs e)
+        {
+            base.OnPointerMoved(e);
+            if (Events.Length == 0) return;
+            var point = e.GetPosition(this);
+            var candidates = Events.Where(item => (item.Metric == CombatMetricKind.Damage) == (point.Y < 48)).ToArray();
+            if (candidates.Length == 0) return;
+            var nearest = candidates.MinBy(item => Math.Abs(Position(item.ObservedAtMilliseconds) - point.X));
+            PulseHelp.Tip(this, DescribeEvent?.Invoke(nearest) ?? $"{nearest.Amount:N0} {nearest.Metric}");
         }
         protected override void OnPointerPressed(PointerPressedEventArgs e)
         {

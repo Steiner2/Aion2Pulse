@@ -2,8 +2,8 @@
   <img src="docs/assets/banner.svg" alt="Aion2Pulse — Damage and healing. One clear view." width="100%">
 </p>
 
-> **0.4.0-preview.2 — experimental preview.** Compact overlays, configurable
-> pull grouping, sliders and additional encounter analysis are available on this
+> **0.4.0-preview.3 — experimental preview.** Compact overlays, configurable
+> pull grouping, contextual hover help and expanded encounter analysis are available on this
 > branch. These changes are not included in the published 0.3.3 release. See the
 > [packet analysis roadmap](docs/packet-analysis-roadmap.md) for evidence limits.
 
@@ -109,6 +109,15 @@ covers DPS/HPS trends, skill modifiers, direct/periodic damage, shields, targets
 observed buff windows, cooldown/charge state, resources, HP snapshots, incoming
 incident review and comparable boss attempts. Graph rates use elapsed range time;
 the overlay can use its active damage clock. Missing observations stay unknown.
+
+Hover settings, shortcuts, tabs or graph points for explanations. Filter combat
+metrics by known boss, other enemy, player or unknown counterpart. Skills include
+DoT/HoT and delivery shares; Targets includes an observed change timeline.
+Effects aligns buff/debuff windows and cooldown projections with DPS/HPS. Review
+separates incoming totals from the incident window, and boss comparisons show both
+DPS and HPS. The latency tooltip shows sample age and stale/unknown evidence.
+**Settings → Skills** configures buff/cooldown icons and the independent monitor
+scale.
 New version-2 archives retain compact support observations; older version-1
 archives still load without inventing missing historical state.
 

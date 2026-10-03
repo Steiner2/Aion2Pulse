@@ -49,5 +49,9 @@ internal sealed class TcpRoundTripEstimator
     {
         lock (_gate) { _pending.Clear(); _milliseconds = null; _highestEnd = null; _generation = 0; }
     }
+    internal long? GetSampleAgeMilliseconds(long generation, long nowMilliseconds)
+    {
+        lock (_gate) return generation == _generation && _milliseconds.HasValue && nowMilliseconds >= _sampleTime ? nowMilliseconds - _sampleTime : null;
+    }
     private static bool Before(uint left, uint right) => unchecked((int)(left - right)) < 0;
 }

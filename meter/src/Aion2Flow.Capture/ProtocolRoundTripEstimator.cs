@@ -14,6 +14,13 @@ internal sealed class ProtocolRoundTripEstimator
 
     public void Clear() => Volatile.Write(ref _current, null);
 
+    internal double? GetSampleAgeMilliseconds(long sessionGeneration, long nowTimestamp)
+    {
+        var sample = Volatile.Read(ref _current);
+        return sample is not null && sample.SessionGeneration == sessionGeneration && nowTimestamp >= sample.ArrivalTimestamp
+            ? Stopwatch.GetElapsedTime(sample.ArrivalTimestamp, nowTimestamp).TotalMilliseconds : null;
+    }
+
     public bool TryObserveEcho(
         long sessionGeneration,
         long clientSentUnixMilliseconds,

@@ -2,12 +2,13 @@ using Cloris.Aion2Flow.Protocol.Combat;
 using Cloris.Aion2Flow.SceneRuntime.Journal;
 using Cloris.Aion2Flow.SceneRuntime.Observation;
 using Cloris.Aion2Flow.SceneRuntime.Playback;
+using Cloris.Aion2Flow.SceneRuntime.Stores;
 
 namespace Cloris.Aion2Flow.SceneRuntime.Archive;
 
 public enum SupportEventKind { Health, Cooldown, Charges, Action }
 public readonly record struct EncounterSupportEvent(long At, int EntityId, SupportEventKind Kind, ResourceEffectRef Skill, long Value, long? Maximum, long Detail);
-public readonly record struct EncounterAuraWindow(int EntityId, int OriginId, ResourceEffectRef Skill, long Start, long End, bool OpenEnd);
+public readonly record struct EncounterAuraWindow(int EntityId, int OriginId, ResourceEffectRef Skill, long Start, long End, bool OpenEnd, AuraDisposition Disposition = AuraDisposition.Unknown);
 public sealed record EncounterSupportData
 {
     public bool Available { get; init; }
@@ -66,7 +67,7 @@ public sealed partial class SceneArchivePayload
                 if (window.EndMilliseconds < Snapshot.EncounterStartTime) continue;
                 auras.Add(new(window.EntityId, window.OriginEntityId, window.DisplayResourceEffectRef,
                     Math.Max(Snapshot.EncounterStartTime, window.StartMilliseconds), window.EndMilliseconds,
-                    window.EndMilliseconds >= Snapshot.EncounterEndTime));
+                    window.EndMilliseconds >= Snapshot.EncounterEndTime, window.Semantics.Disposition));
             }
         }
         return new() { Available = true, Truncated = truncated, Events = result.OrderBy(e => e.At).ToArray(), Auras = auras.ToArray() };

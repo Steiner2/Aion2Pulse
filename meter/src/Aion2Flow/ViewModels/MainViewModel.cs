@@ -1327,7 +1327,7 @@ public sealed partial class MainViewModel : FrameBatchedObservableObject, IAsync
             RoundTripTimeMilliseconds = 0;
             OnPropertyChanged(nameof(RoundTripTimeDisplay));
             LatencyIndicatorColor = IndicatorIdleColor;
-            LatencyToolTip = Localization["Status_LatencyUnavailable"];
+            LatencyToolTip = _captureService.LatencyEvidenceDescription;
             return;
         }
 
@@ -1339,9 +1339,7 @@ public sealed partial class MainViewModel : FrameBatchedObservableObject, IAsync
             <= WarningLatencyUpperBoundMilliseconds => IndicatorWarnColor,
             _ => IndicatorErrorColor
         };
-        LatencyToolTip = _captureService.IsUsingTransportRoundTripEstimate
-            ? "Game connection RTT · passive TCP estimate"
-            : Localization["Status_LatencyMeasured"];
+        LatencyToolTip = _captureService.LatencyEvidenceDescription;
     }
 
 }

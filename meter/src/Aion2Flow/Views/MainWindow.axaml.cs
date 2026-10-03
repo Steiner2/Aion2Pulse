@@ -32,6 +32,7 @@ public partial class MainWindow : Window
     private readonly GlobalHotkeyService _globalHotkeyService;
     private readonly OverlayInteractionController _overlayInteractionController;
     private readonly SettingsService _settingsService;
+    private readonly GameResourceService _pulseResources;
     private readonly AvaloniaFrameClockService _frameClock;
     private readonly UiScaleService _uiScale;
     private readonly LocalizationService _localization;
@@ -68,6 +69,7 @@ public partial class MainWindow : Window
         _globalHotkeyService = serviceProvider.GetRequiredService<GlobalHotkeyService>();
         _overlayInteractionController = serviceProvider.GetRequiredService<OverlayInteractionController>();
         _settingsService = serviceProvider.GetRequiredService<SettingsService>();
+        _pulseResources = serviceProvider.GetRequiredService<GameResourceService>();
         _frameClock = serviceProvider.GetRequiredService<AvaloniaFrameClockService>();
         _uiScale = serviceProvider.GetRequiredService<UiScaleService>();
         _localization = serviceProvider.GetRequiredService<LocalizationService>();

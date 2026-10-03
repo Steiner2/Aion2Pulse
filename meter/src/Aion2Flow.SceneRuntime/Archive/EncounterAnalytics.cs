@@ -7,8 +7,13 @@ namespace Cloris.Aion2Flow.SceneRuntime.Archive;
 
 public readonly record struct MetricBucket(double Second, double Damage, double Healing);
 public readonly record struct SkillAnalysis(int Skill, double Damage, double Healing, double ShieldGranted, double ShieldAbsorbed,
-    int Events, int DamageEvents, int Critical, int Back, int Front, int Block, int Parry, int Evade, int Invincible, double PeriodicDamage);
+    int Events, int DamageEvents, int Critical, int Back, int Front, int Block, int Parry, int Evade, int Invincible, double PeriodicDamage,
+    double PeriodicHealing, int Perfect, int DefensivePerfect);
 public readonly record struct TargetAnalysis(int Target, string Category, double Damage, double Healing, double ShieldAbsorbed);
+public readonly record struct DeliveryAnalysis(CombatDeliveryKind Delivery, int Events, double Damage, double Healing);
+public readonly record struct ObservedTargetChange(long At, int Previous, int Next, int Skill, long Ordinal);
+public readonly record struct ObservedDamageGap(long Start, long End);
+public enum AnalysisTargetScope { All, Boss, OtherEnemy, Player, Unknown }
 
 public static class EncounterAnalytics
 {
@@ -44,7 +49,9 @@ public static class EncounterAnalytics
             double Sum(CombatMetricKind kind) => group.Where(e => e.Metric == kind).Sum(e => (double)e.Amount);
             return new SkillAnalysis(group.Key, Sum(CombatMetricKind.Damage), Sum(CombatMetricKind.Healing), Sum(CombatMetricKind.ShieldGranted), Sum(CombatMetricKind.ShieldAbsorbed),
                 group.Count(), damageEvents.Length, Flag(DamageModifiers.Critical), Flag(DamageModifiers.Back), Flag(DamageModifiers.Front), Flag(DamageModifiers.Block), Flag(DamageModifiers.Parry), Flag(DamageModifiers.Evade), Flag(DamageModifiers.Invincible),
-                damageEvents.Where(e => e.Delivery == CombatDeliveryKind.Periodic).Sum(e => (double)e.Amount));
+                damageEvents.Where(e => e.Delivery == CombatDeliveryKind.Periodic).Sum(e => (double)e.Amount),
+                group.Where(e => e.Metric == CombatMetricKind.Healing && e.Delivery == CombatDeliveryKind.Periodic).Sum(e => (double)e.Amount),
+                Flag(DamageModifiers.Perfect), Flag(DamageModifiers.DefensivePerfect));
         }).OrderByDescending(e => e.Damage + e.Healing + e.ShieldAbsorbed).ToArray();
 
     public static string TargetCategory(SceneArchivePayload payload, int id)
@@ -54,6 +61,15 @@ public static class EncounterAnalytics
         if (payload.IdentityScope.TryGetPcMetadata(id, out _)) return "Player";
         return "Unknown";
     }
+
+    public static CombatMetricDetailEvent[] FilterTargets(SceneArchivePayload payload, IReadOnlyList<CombatMetricDetailEvent> events, AnalysisTargetScope scope, bool incoming = false)
+    {
+        return events.Where(e => CounterpartInScope(payload, incoming ? e.SourceId : e.TargetId, scope)).ToArray();
+    }
+
+    public static bool CounterpartInScope(SceneArchivePayload payload, int entityId, AnalysisTargetScope scope)
+        => scope == AnalysisTargetScope.All || TargetCategory(payload, entityId) == (scope switch
+        { AnalysisTargetScope.Boss => "Boss", AnalysisTargetScope.OtherEnemy => "Other enemy", AnalysisTargetScope.Player => "Player", _ => "Unknown" });
 
     public static TargetAnalysis[] Targets(SceneArchivePayload payload, IReadOnlyList<CombatMetricDetailEvent> events, bool incoming = false)
         => events.GroupBy(e => incoming ? e.SourceId : e.TargetId).Select(group => new TargetAnalysis(group.Key, TargetCategory(payload, group.Key),
@@ -71,6 +87,33 @@ public static class EncounterAnalytics
             total += Math.Max(0, window.End - Math.Max(end, window.Start)); end = Math.Max(end, window.End);
         }
         return total / 1000d;
+    }
+
+    public static DeliveryAnalysis[] Deliveries(IReadOnlyList<CombatMetricDetailEvent> events)
+        => events.Where(e => e.Metric is CombatMetricKind.Damage or CombatMetricKind.Healing).GroupBy(e => e.Delivery)
+            .Select(g => new DeliveryAnalysis(g.Key, g.Count(), g.Where(e => e.Metric == CombatMetricKind.Damage).Sum(e => (double)e.Amount),
+                g.Where(e => e.Metric == CombatMetricKind.Healing).Sum(e => (double)e.Amount)))
+            .OrderBy(g => g.Delivery).ToArray();
+
+    public static ObservedTargetChange[] TargetChanges(IReadOnlyList<CombatMetricDetailEvent> events, bool incoming = false)
+    {
+        var damage = events.Where(e => e.Metric == CombatMetricKind.Damage && e.Amount > 0)
+            .OrderBy(e => e.ObservedAtMilliseconds).ThenBy(e => e.SourceObservationOrdinal).ToArray();
+        var changes = new List<ObservedTargetChange>();
+        for (var i = 1; i < damage.Length; i++)
+        {
+            var previous = incoming ? damage[i - 1].SourceId : damage[i - 1].TargetId;
+            var next = incoming ? damage[i].SourceId : damage[i].TargetId;
+            if (previous != next) changes.Add(new(damage[i].ObservedAtMilliseconds, previous, next, damage[i].SkillCode, damage[i].SourceObservationOrdinal));
+        }
+        return changes.ToArray();
+    }
+
+    public static ObservedDamageGap[] DamageGaps(IReadOnlyList<CombatMetricDetailEvent> events, long thresholdMilliseconds = 3000)
+    {
+        var times = events.Where(e => e.Metric == CombatMetricKind.Damage && e.Amount > 0).Select(e => e.ObservedAtMilliseconds).Distinct().Order().ToArray();
+        return times.Zip(times.Skip(1)).Where(p => p.Second - p.First > Math.Max(0, thresholdMilliseconds))
+            .Select(p => new ObservedDamageGap(p.First, p.Second)).ToArray();
     }
 
     public static bool ComparableBoss(SceneArchivePayload a, SceneArchivePayload b)

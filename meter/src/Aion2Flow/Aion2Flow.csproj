@@ -5,7 +5,7 @@
     <AssemblyName>Aion2Pulse</AssemblyName>
     <Product>Aion2Pulse</Product>
     <Title>Aion2Pulse</Title>
-    <Version>0.4.0-preview.2</Version>
+    <Version>0.4.0-preview.3</Version>
     <TargetFramework>net10.0-windows</TargetFramework>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <ApplicationManifest>app.manifest</ApplicationManifest>

@@ -62,6 +62,25 @@ public sealed class WinDivertCaptureService(ProcessPortDiscoveryService processP
         }
     }
     public string LastStatusMessage { get; private set; } = string.Empty;
+    public string LatencyEvidenceDescription
+    {
+        get
+        {
+            const string refresh = "Display refresh: every 5 seconds. No active ping probes are sent.";
+            if (!CaptureConnectionGate.TryGetLockedConnection(out var connection) || !CaptureConnectionGate.TryGetActiveAdmission(in connection, out var admission))
+                return $"Waiting for an admitted game connection.\n{refresh}";
+            var timestamp = Stopwatch.GetTimestamp(); var tick = Environment.TickCount64;
+            var protocolAge = _protocolRttEstimator.GetSampleAgeMilliseconds(admission.Generation, timestamp);
+            var tcpAge = _tcpRttEstimator.GetSampleAgeMilliseconds(admission.Generation, tick);
+            if (_protocolRttEstimator.GetCurrentMilliseconds(admission.Generation, timestamp).HasValue)
+                return $"Protocol echo RTT · last sample {protocolAge / 1000:0.0}s ago · expires after 30s.\n{refresh}";
+            if (_tcpRttEstimator.GetCurrentMilliseconds(admission.Generation, tick).HasValue)
+                return $"Passive TCP RTT estimate · last sample {tcpAge / 1000d:0.0}s ago · expires after 20s. TCP timing can differ from server processing latency.\n{refresh}";
+            if (protocolAge.HasValue || tcpAge.HasValue)
+                return $"Stale RTT evidence · newest sample {Math.Min(protocolAge ?? double.MaxValue, tcpAge ?? long.MaxValue) / 1000:0.0}s ago. Unknown is shown as — ms.\n{refresh}";
+            return $"No usable RTT sample on the current game connection. Unknown is shown as — ms.\n{refresh}";
+        }
+    }
     public bool IsUsingTransportRoundTripEstimate =>
         CaptureConnectionGate.TryGetLockedConnection(out var connection) &&
         CaptureConnectionGate.TryGetActiveAdmission(in connection, out var admission) &&

@@ -11,6 +11,9 @@ public sealed class TcpRoundTripEstimatorTests
         rtt.Observe(1, false, 0, 0, true, 140, 1078);
         Assert.Equal(78d, rtt.GetCurrentMilliseconds(1, 1078));
         Assert.Null(rtt.GetCurrentMilliseconds(1, 22000));
+        Assert.Equal(20922, rtt.GetSampleAgeMilliseconds(1, 22000));
+        Assert.Null(rtt.GetSampleAgeMilliseconds(2, 22000));
+        Assert.Null(rtt.GetSampleAgeMilliseconds(1, 1000));
         Assert.Null(rtt.GetCurrentMilliseconds(2, 1100));
     }
     [Fact] public void RetransmissionCannotGenerateAmbiguousSample()
@@ -54,6 +57,7 @@ public sealed class TcpRoundTripEstimatorTests
         rtt.Observe(1, false, 0, 0, true, 140, 1080);
         Assert.Equal(80d, rtt.GetCurrentMilliseconds(1, 1080));
         rtt.Clear();
+        Assert.Null(rtt.GetSampleAgeMilliseconds(1, 1100));
         Assert.Null(rtt.GetCurrentMilliseconds(1, 1100));
     }
 }

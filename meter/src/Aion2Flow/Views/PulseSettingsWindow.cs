@@ -15,7 +15,7 @@ namespace Cloris.Aion2Flow.Views;
 
 public sealed class PulseSettingsWindow : Window
 {
-    public PulseSettingsWindow(SettingsFlyoutViewModel vm)
+    public PulseSettingsWindow(SettingsFlyoutViewModel vm, SkillMonitorSettingsViewModel? skillMonitor = null)
     {
         Title = "Aion2Pulse / Settings";
         Width = 760; Height = 640; MinWidth = 620; MinHeight = 480;
@@ -40,7 +40,7 @@ public sealed class PulseSettingsWindow : Window
             EnumChoice<CombatantSortMetric>("Display and sorting", CompiledBinding.Create<SettingsFlyoutViewModel, CombatantSortMetric>(x => x.CombatantSortMetric, mode: BindingMode.TwoWay)),
             Check("Show DPS and HPS together", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowBothMetrics, mode: BindingMode.TwoWay)),
             EnumChoice<Cloris.Aion2Flow.SceneRuntime.Model.CombatantStatisticsScope>("Players", CompiledBinding.Create<SettingsFlyoutViewModel, Cloris.Aion2Flow.SceneRuntime.Model.CombatantStatisticsScope>(x => x.CombatantStatisticsScope, mode: BindingMode.TwoWay)),
-            Check("Show total and per-second columns", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowDamageColumn, mode: BindingMode.TwoWay)),
+            Check("Show total column", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowDamageColumn, mode: BindingMode.TwoWay)),
             Check("Show per-second column", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowDamagePerSecondColumn, mode: BindingMode.TwoWay)),
             Check("Show player names", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowPlayerNames, mode: BindingMode.TwoWay)),
             Check("Show server names", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowPlayerShortServerName, mode: BindingMode.TwoWay)),
@@ -61,6 +61,13 @@ public sealed class PulseSettingsWindow : Window
             EnumChoice<EncounterTimeDisplayFormat>("Time format", CompiledBinding.Create<SettingsFlyoutViewModel, EncounterTimeDisplayFormat>(x => x.EncounterTimeDisplayFormat, mode: BindingMode.TwoWay)),
             Check("Show boss health", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.ShowFocusStatusBar, mode: BindingMode.TwoWay)),
             Check("Enable skill monitor", CompiledBinding.Create<SettingsFlyoutViewModel, bool>(x => x.SkillMonitorEnabled, mode: BindingMode.TwoWay))));
+        if (skillMonitor is not null)
+        {
+            tabs.Items.Add(Page("Skills", "Choose which observed buffs and cooldowns appear in the separate skill monitor.",
+                Text("Cooldown and charge coverage is primarily local-client state. Selecting a skill does not make unavailable packets appear."),
+                new SkillMonitorSettingsView { DataContext = skillMonitor, Width = double.NaN, Height = 450, HorizontalAlignment = HorizontalAlignment.Stretch }));
+            Closed += (_, _) => skillMonitor.Dispose();
+        }
         tabs.Items.Add(Page("History", "Saved locally · retains 50 bosses and 50 normal pulls independently.",
             EnumChoice<HistoryLayout>("History layout", CompiledBinding.Create<SettingsFlyoutViewModel, HistoryLayout>(x => x.HistoryLayout, mode: BindingMode.TwoWay)),
             Text("Filter by boss, incomplete result or encounter name. Select a player to inspect damage, healing and original skill icons."),
@@ -68,8 +75,9 @@ public sealed class PulseSettingsWindow : Window
         tabs.Items.Add(Page("Capture", "Passive network packet recording.", Text("Global Early Access · network only"),
             Text("Capture starts with the meter. Driver, game port and connection status remain visible in the footer."),
             Text("Healing shows amounts reported by the packets. Shield absorption is kept separate in player details.")));
-        tabs.Items.Add(Page("About", "Aion2Pulse Preview", Text("Version 0.4.0-preview.2 · Experimental"), Text("Based on the Aion2Flow packet engine. GPL-3.0 license and upstream credits are included in the package.")));
+        tabs.Items.Add(Page("About", "Aion2Pulse Preview", Text("Version 0.4.0-preview.3 · Experimental"), Text("Based on the Aion2Flow packet engine. GPL-3.0 license and upstream credits are included in the package.")));
         var done = new Button { Content = "Done", HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(22, 7) };
+        PulseHelp.Tip(done, "Close settings. Changes have already been saved; no Apply button is needed.");
         done.Click += (_, _) => Close();
         var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(20, 10) };
         footer.Children.Add(Text("Changes are saved automatically")); Grid.SetColumn(done, 1); footer.Children.Add(done);
@@ -80,7 +88,7 @@ public sealed class PulseSettingsWindow : Window
         {
             var pageContent = page.Content; page.Content = null;
             firstPage ??= pageContent;
-            var button = new Button { Content = page.Header }; button.Classes.Add("PulseNav");
+            var button = new Button { Content = page.Header }; button.Classes.Add("PulseNav"); PulseHelp.Tip(button, page.Header?.ToString() switch { "Appearance" => "Overlay design, size, opacity and class colors.", "Overlay" => "Window behavior, displayed players, columns and keyboard shortcuts.", "Combat" => "How fights are grouped and how rate time handles pauses.", "Skills" => "Choose buff/cooldown icons and the independent skill monitor scale.", "History" => "Saved encounter layouts and independent boss/pull retention.", "Capture" => "Passive connection status and recording coverage.", _ => "Preview version, license and upstream credits." });
             button.Click += (_, _) => { foreach (var item in categories.Children) item.Classes.Set("selected", ReferenceEquals(item, button)); pageHost.Content = pageContent; };
             categories.Children.Add(button);
         }
@@ -101,6 +109,7 @@ public sealed class PulseSettingsWindow : Window
             var panel = new StackPanel { Spacing = 6 }; panel.Children.Add(preview);
             panel.Children.Add(new TextBlock { Text = design switch { MeterDesign.RaidClassic => "Raid Classic", MeterDesign.FocusGlass => "Focus Glass", _ => "Combat Studio" }, FontSize = 11, TextWrapping = TextWrapping.Wrap });
             var button = new Button { Content = panel, Tag = design, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+            PulseHelp.Tip(button, design switch { MeterDesign.RaidClassic => "Class-colored bars with totals and rates in one row.", MeterDesign.FocusGlass => "An open surface with thinner bars; single-metric rows use a second line.", _ => "Subtle separators and a compact layout for damage and healing." });
             button.Click += (_, _) => vm.MeterDesign = design;
             Grid.SetColumn(button, buttons.Count); choices.Children.Add(button); buttons.Add(button);
         }
@@ -120,9 +129,10 @@ public sealed class PulseSettingsWindow : Window
     private static TextBlock Text(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, Foreground = Brush.Parse("#AAB7C6"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
     private static Control Row(string label, Control input)
     {
+        PulseHelp.Tip(input, PulseHelp.Setting(label));
         var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 16 };
         row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap });
-        Grid.SetColumn(input, 1); row.Children.Add(input); return row;
+        Grid.SetColumn(input, 1); row.Children.Add(input); return PulseHelp.Tip(row, PulseHelp.Setting(label));
     }
     private static Control EnumChoice<T>(string label, BindingBase property) where T : struct, Enum => Choice(label, property, Enum.GetValues<T>());
     private static Control Choice(string label, BindingBase property, System.Collections.IEnumerable values)
@@ -147,6 +157,7 @@ public sealed class PulseSettingsWindow : Window
     private static Control Range(string label, BindingBase property, int min, int max)
     {
         var input = new Slider { Minimum = min, Maximum = max, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 155 };
+        PulseHelp.Tip(input, PulseHelp.Setting(label));
         input.Bind(Slider.ValueProperty, property);
         var value = new TextBlock { MinWidth = 36, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         value.Bind(TextBlock.TextProperty, property);
@@ -155,11 +166,12 @@ public sealed class PulseSettingsWindow : Window
     }
     private static Control Check(string label, BindingBase property)
     {
-        var check = new CheckBox { Content = label }; check.Bind(CheckBox.IsCheckedProperty, property); return check;
+        var check = new CheckBox { Content = label }; check.Bind(CheckBox.IsCheckedProperty, property); return PulseHelp.Tip(check, PulseHelp.Setting(label));
     }
     private static Control Hotkey(string label, SettingsFlyoutViewModel vm, GlobalHotkeyAction action, BindingBase display)
     {
         var capture = new Button(); capture.Bind(ContentControl.ContentProperty, display);
+        PulseHelp.Tip(capture, PulseHelp.Setting(label));
         capture.Click += (_, _) => { vm.BeginCaptureHotkey(action); capture.Focus(); };
         capture.KeyDown += (_, e) =>
         {
@@ -169,7 +181,7 @@ public sealed class PulseSettingsWindow : Window
             e.Handled = true;
         };
         capture.LostFocus += (_, _) => vm.CancelCaptureHotkey(action);
-        var clear = new Button { Content = "Clear" }; clear.Click += (_, _) => vm.ClearHotkey(action);
+        var clear = PulseHelp.Tip(new Button { Content = "Clear" }, "Remove this keyboard shortcut. This does not reset combat or change other shortcuts."); clear.Click += (_, _) => vm.ClearHotkey(action);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 }; buttons.Children.Add(capture); buttons.Children.Add(clear);
         return Row(label, buttons);
     }

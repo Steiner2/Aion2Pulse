@@ -45,14 +45,14 @@
                         <Button Classes="WindowBtn RefreshBtn"
                                 Command="{Binding ResetCommand}"
                                 IsEnabled="{Binding IsCapturing}"
-                                ToolTip.Tip="{markups:Translate Action_BattleReset}">
+                                ToolTip.Tip="Save the current fight and start a fresh measurement. Existing history and overall totals are retained.">
                             <Path Classes="Glyph GlyphSm" Data="{StaticResource rotate-cw}" />
                         </Button>
 
                         <Button x:Name="EncounterHistoryButton" Click="OpenHistory"
                                 Classes="WindowBtn"
                                 Classes.active="{Binding IsViewingArchivedEncounter}"
-                                ToolTip.Tip="{Binding HistoryStorageStatus}">
+                                ToolTip.Tip="{Binding HistoryButtonToolTip}">
                             <Path Classes="Glyph GlyphMd" Data="{StaticResource history}" />
 
                         </Button>
@@ -69,15 +69,15 @@
                                 Orientation="Horizontal"
                                 Spacing="2">
                         <Button x:Name="MetricModeButton" Classes="WindowBtn" Click="ToggleHealing" ToolTip.Tip="Cycle DPS, HPS and DPS + HPS" Width="60"><TextBlock Text="{Binding SettingsFlyout.MetricModeLabel}" FontSize="10" /></Button>
-                        <Button Classes="WindowBtn" Click="CycleDesign" Width="22" ToolTip.Tip="Cycle overlay designs"><TextBlock Text="S" FontSize="10" /></Button>
+                        <Button Classes="WindowBtn" Click="CycleDesign" Width="22" ToolTip.Tip="Switch between Raid Classic, Focus Glass and Combat Studio. The selected style is saved automatically."><TextBlock Text="S" FontSize="10" /></Button>
                         <Button Classes="WindowBtn" Click="CycleTracking" Width="22" ToolTip.Tip="{Binding SettingsFlyout.TrackingDescription}"><TextBlock Text="{Binding SettingsFlyout.TrackingShortcutLabel}" FontSize="10" /></Button>
                         <Button Classes="WindowBtn MinBtn"
-                                Click="Minimize">
+                                Click="Minimize" ToolTip.Tip="Minimize the overlay. Recording continues.">
                             <Path Classes="Glyph GlyphSm" Data="{StaticResource minus}" />
                         </Button>
 
                         <Button Classes="WindowBtn CloseBtn"
-                                Click="Exit">
+                                Click="Exit" ToolTip.Tip="Close Aion2Pulse and stop recording.">
                             <Path Classes="Glyph GlyphSm" Data="{StaticResource x}" />
                         </Button>
                     </StackPanel>
@@ -187,13 +187,13 @@
         </ItemsControl>
 
         <StackPanel Grid.Row="2" Spacing="2">
-        <TextBlock Text="{Binding SegmentStatus}" FontSize="10" Foreground="#A0AFBE" Margin="8,4" />
+        <TextBlock Text="{Binding SegmentStatus}" ToolTip.Tip="Current recording state. Frozen results keep their final rate. P = separate pulls, C = combat chain, M = manual reset; use the title shortcut or Combat settings to change behavior." FontSize="10" Foreground="#A0AFBE" Margin="8,4" />
         <Grid Classes="PulseMetricHeaders" Loaded="PulseGridLoaded" IsVisible="{Binding SettingsFlyout.ShowMetricHeaders}" Margin="7,5,7,3" ColumnDefinitions="18,*,85,85,0,0,Auto" ColumnSpacing="5">
-            <TextBlock Grid.Column="1" Text="PLAYER" FontSize="9" Foreground="#84939F" />
-            <TextBlock Grid.Column="2" Text="{Binding SettingsFlyout.AmountLabel}" FontSize="9" Foreground="#84939F" TextAlignment="Right" />
-            <TextBlock Grid.Column="3" Text="{Binding SettingsFlyout.RateLabel}" FontSize="9" Foreground="#84939F" TextAlignment="Right" />
-            <TextBlock Grid.Column="4" Text="HEALING" IsVisible="{Binding SettingsFlyout.ShowBothMetrics}" FontSize="9" Foreground="#84939F" TextAlignment="Right" />
-            <TextBlock Grid.Column="5" Text="HPS" IsVisible="{Binding SettingsFlyout.ShowBothMetrics}" FontSize="9" Foreground="#84939F" TextAlignment="Right" />
+            <TextBlock Grid.Column="1" Text="PLAYER" ToolTip.Tip="Recorded players in the selected scope. Select a row for skill details." FontSize="9" Foreground="#84939F" />
+            <TextBlock Grid.Column="2" Text="{Binding SettingsFlyout.AmountLabel}" ToolTip.Tip="Total recorded damage or healing in this result. Healing is packet-reported; effective overheal is unknown." FontSize="9" Foreground="#84939F" TextAlignment="Right" />
+            <TextBlock Grid.Column="3" Text="{Binding SettingsFlyout.RateLabel}" ToolTip.Tip="Damage or healing per second using the configured combat clock. Pause exclusion can differ from elapsed-time analysis." FontSize="9" Foreground="#84939F" TextAlignment="Right" />
+            <TextBlock Grid.Column="4" Text="HEALING" ToolTip.Tip="Packet-reported healing. Shields stay separate; effective overheal is unknown." IsVisible="{Binding SettingsFlyout.ShowBothMetrics}" FontSize="9" Foreground="#84939F" TextAlignment="Right" />
+            <TextBlock Grid.Column="5" Text="HPS" ToolTip.Tip="Healing per second using the same configured combat clock as DPS." IsVisible="{Binding SettingsFlyout.ShowBothMetrics}" FontSize="9" Foreground="#84939F" TextAlignment="Right" />
         </Grid>
         <controls:AnimatedItemsView
                                      Classes="MainHudForeground"
