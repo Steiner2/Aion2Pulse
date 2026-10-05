@@ -1,10 +1,10 @@
 # Packet analysis roadmap
 
-The preview implementations and research proposals are based on the current parser and runtime, not on assumed access to the game client. Capture stays passive. No raw packets or real player data belong in this repository. Every additional metric needs a documented definition and live Global validation before being presented as authoritative.
+The implemented features and research proposals are based on the current parser and runtime, not on assumed access to the game client. Capture stays passive. No raw packets or real player data belong in this repository. Every additional metric needs a documented definition and live Global validation before being presented as authoritative.
 
 ## Available foundations
 
-| Feature | Current evidence | Preview presentation | Limits |
+| Feature | Current evidence | Presentation | Limits |
 | --- | --- | --- | --- |
 | Damage/healing over time | Persisted per-player metric events with observation timestamps, source, target, skill and amount | Implemented adaptive damage/HPS graphs and selectable time ranges | Packet arrival is not exact server execution time. Burst traffic can bunch events. |
 | Skill event sequence | Persisted metric events, original skill catalog and icons | Implemented event timeline with outgoing/incoming directions and chronological list | Hits, multi-target effects and periodic ticks are not separate casts. Skills without a recorded effect may be absent. |
@@ -19,7 +19,7 @@ The preview implementations and research proposals are based on the current pars
 | Boss HP progression | Boss focus / entity vital observations | HP curve aligned with damage and damage pauses | Version-2 archives retain observed HP points; the review shows curves for up to three bosses and a chronological list. Missing observations are not interpolated into verified phases. |
 | Connection quality | Passive protocol/TCP latency estimate and capture state | Implemented RTT tooltip with source, sample age, expiration and unknown state; interrupted archives remain marked | No active probing; passive TCP RTT can differ from game-server processing latency. |
 
-## Implemented in preview.3
+## Implemented in 0.3.4
 
 1. **Damage/healing graph and range selection.** Reuse persisted metric events; tie the range to skill and target breakdowns. Define whether a rate uses elapsed range time or the meter's active damage denominator.
 2. **Boss-versus-add contribution and per-skill crit/positional breakdown.** Reuse existing pairs and flags; explicitly show unknown classifications. Validate crit and attempt denominators first.
@@ -27,7 +27,7 @@ The preview implementations and research proposals are based on the current pars
 4. **Incoming damage / death review.** Incoming incident windows and HP snapshots are implemented. A killing blow remains unknown without validated death ordering. Present an ordered incident window with damage, healing and shields.
 5. **Comparable boss attempts.** Compare the same known boss and selected phase/time ranges. Keep map, duration, group size and missing-capture status visible; do not rank unrelated pulls.
 
-Preview.3 also adds contextual hover help across settings, the overlay, history,
+Version 0.3.4 also adds contextual hover help across settings, the overlay, history,
 analysis tabs, graph points and timeline markers. Settings → Skills restores
 access to the monitor icon selection and its separate scale. The counterpart filter applies
 to metric events; support state remains scoped to the selected player and range.

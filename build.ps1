@@ -2,7 +2,7 @@ param(
     [switch]$Test,
     [switch]$Publish,
     [switch]$Offline,
-    [string]$PublishFolder = 'artifacts\Aion2Pulse-0.4.0-preview.3',
+    [string]$PublishFolder = 'artifacts\Aion2Pulse-0.3.4',
     [string]$PackageFileName = 'Aion2Pulse-win-x64.zip'
 )
 $ErrorActionPreference = 'Stop'

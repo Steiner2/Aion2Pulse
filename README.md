@@ -2,11 +2,8 @@
   <img src="docs/assets/banner.svg" alt="Aion2Pulse — Damage and healing. One clear view." width="100%">
 </p>
 
-> **0.4.0-preview.3 — experimental preview.** Compact overlays, configurable
-> pull grouping, contextual hover help and expanded encounter analysis are available on this
-> branch. These changes are not included in the published 0.3.3 release. See the
-> [packet analysis roadmap](docs/packet-analysis-roadmap.md) for evidence limits.
-
+> **0.3.4** brings tighter overlays, configurable pull grouping, protected boss
+> history, skill-event timelines and contextual hover help.
 
 <p align="center">
   <strong>A DPS and healing meter for AION 2.</strong><br>
@@ -24,7 +21,7 @@
 <p align="center">Windows x64 &nbsp; · &nbsp; .NET 10 &nbsp; · &nbsp; GPL-3.0</p>
 
 <p align="center">
-  <img src="docs/assets/pulse-combined-RaidClassic.png" alt="Aion2Pulse showing damage, DPS, healing and HPS with synthetic test data" width="760">
+  <img src="docs/assets/pulse-combined-RaidClassic.png" alt="Aion2Pulse showing damage, DPS, healing and HPS with synthetic test data" width="560">
   <br><sub>Actual application UI. All screenshots use synthetic players and combat data.</sub>
 </p>
 
@@ -46,7 +43,7 @@ and the combined damage/DPS/healing/HPS view. **DPS remains the default.**
 
 ## A history worth keeping
 
-![Combat history populated with synthetic encounters](docs/assets/pulse-history-SplitView.png)
+![Combat history and skill timeline with synthetic encounters](docs/assets/pulse-history-Timeline.png)
 
 Retain the last 50 boss fights and 50 normal pulls independently. New mob pulls
 cannot evict saved bosses. History opens on bosses; filters also show all fights,
@@ -57,9 +54,9 @@ Choose a split view with an adjustable divider, compact list or card layout.
 Overall totals cover the current map visit and exclude travel and waiting time.
 
 <details>
-<summary><strong>See the skill event timeline</strong></summary>
+<summary><strong>See the player overview</strong></summary>
 
-![Skill event timeline with synthetic encounters](docs/assets/pulse-history-Timeline.png)
+![Player overview with synthetic encounters](docs/assets/pulse-history-SplitView.png)
 
 </details>
 
@@ -122,6 +119,15 @@ New version-2 archives retain compact support observations; older version-1
 archives still load without inventing missing historical state.
 
 ![Encounter analysis using synthetic data](docs/assets/pulse-analysis-0.png)
+
+<details>
+<summary><strong>Explore timelines, effects and combat settings</strong></summary>
+
+![Observed effects and cooldowns with synthetic data](docs/assets/pulse-analysis-3.png)
+
+![Combat tracking settings](docs/assets/pulse-settings-Combat.png)
+
+</details>
 
 ## Combat timing
 
